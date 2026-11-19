@@ -44,12 +44,12 @@ export function Modals({
               <ClockIcon size={22} />
             </div>
             <p className="text-[15px] font-bold leading-snug text-[#4A3246]">
-              Time&apos;s not up yet! Do you still want to pause?
+              确定暂停本次自习吗？
             </p>
             <p className="mt-1.5 text-[12.5px] font-medium text-[#755873]">
               {modal === 'confirm-leave-study'
-                ? '时间还没到哦！确定还要暂停并离开自习吗？'
-                : '时间还没到哦！确定还要暂停吗？'}
+                ? '暂停并离开自习后，计时进度仍会保留。'
+                : '暂停后保留当前进度，随时可以继续。'}
             </p>
             <div className="mt-4 flex items-center justify-center gap-3">
               <button
@@ -58,7 +58,7 @@ export function Modals({
                 onClick={onConfirmPause}
                 className="min-w-[96px] cursor-pointer rounded-2xl border-2 border-[#6E4F75] bg-[#FFE4EF] px-4 py-2 text-[13px] font-bold text-[#4A3246] shadow-[0_2px_0_#E6B9CE] transition hover:bg-[#FFD4E6] active:translate-y-0.5"
               >
-                Yes
+                确定
               </button>
               <button
                 type="button"
@@ -66,7 +66,7 @@ export function Modals({
                 onClick={onRejectPause}
                 className="min-w-[96px] cursor-pointer rounded-2xl border-2 border-[#6E4F75] bg-[#EFE8FF] px-4 py-2 text-[13px] font-bold text-[#4A3246] shadow-[0_2px_0_#CBB9F2] transition hover:bg-[#E4D7FF] active:translate-y-0.5"
               >
-                No
+                取消
               </button>
             </div>
           </>
@@ -78,10 +78,10 @@ export function Modals({
               <HeartIcon size={22} />
             </div>
             <p className="text-[15px] font-bold leading-snug text-[#4A3246]">
-              Time&apos;s not up yet! Go back to study!
+              继续专注，加油！
             </p>
             <p className="mt-1.5 text-[12.5px] font-medium text-[#755873]">
-              时间还没到！快回去学习吧！
+              继续完成本次自习吧！
             </p>
             <div className="mt-4 flex justify-center">
               <button
@@ -90,7 +90,7 @@ export function Modals({
                 onClick={onDismissGoBack}
                 className="min-w-[120px] cursor-pointer rounded-2xl border-2 border-[#6E4F75] bg-[#FFF2B8] px-5 py-2 text-[13px] font-bold text-[#4A3246] shadow-[0_2px_0_#E6CE80] transition hover:bg-[#FFEA96] active:translate-y-0.5"
               >
-                Okay
+                继续学习
               </button>
             </div>
           </>
@@ -102,7 +102,7 @@ export function Modals({
               <CheckIcon size={20} />
             </div>
             <p className="text-[15px] font-bold leading-snug text-[#4A3246]">
-              Save list?
+              保存清单？
             </p>
             <p className="mt-1.5 text-[12.5px] font-medium text-[#755873]">
               保存清单？确认后将保存在本地以便下次继续查看。
@@ -114,7 +114,7 @@ export function Modals({
                 onClick={onConfirmSaveTodo}
                 className="min-w-[96px] cursor-pointer rounded-2xl border-2 border-[#6E4F75] bg-[#DCFCE7] px-4 py-2 text-[13px] font-bold text-[#14532D] shadow-[0_2px_0_#A7DFBA] transition hover:bg-[#C6F6D5] active:translate-y-0.5"
               >
-                Yes
+                确定
               </button>
               <button
                 type="button"
@@ -122,7 +122,7 @@ export function Modals({
                 onClick={onCancelSaveTodo}
                 className="min-w-[96px] cursor-pointer rounded-2xl border-2 border-[#6E4F75] bg-[#FFF5FA] px-4 py-2 text-[13px] font-bold text-[#4A3246] shadow-[0_2px_0_#E3C4D7] transition hover:bg-[#FFEBF4] active:translate-y-0.5"
               >
-                No
+                取消
               </button>
             </div>
           </>

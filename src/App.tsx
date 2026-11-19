@@ -2,7 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { E1, jh } from './audio';
 import { DeskCharacterScene } from './character';
 import { EmotionTab } from './gui/EmotionTab';
-import { ClockIcon, HeartIcon, MetronomeIcon } from './gui/Icons';
+import { FloatingConsole } from './gui/FloatingConsole';
+import { SettingsTab } from './gui/SettingsTab';
+import { useSettings } from './state/SettingsContext';
+import { createCompletionSound, timerValue, type TimerMode } from './state/timer';
+import { isRandomEventAllowed } from './character/useCharacterEvents';
 import { MetronomeTab } from './gui/MetronomeTab';
 import { Modals, type AppModalType } from './gui/Modals';
 import { StatusTab, type TimerState } from './gui/StatusTab';
@@ -11,14 +15,14 @@ import {
   DEFAULT_EVENT_SWITCHES,
   type ActivityMode,
   type AudioSourceMode,
-  type EmotionType,
+  type ExpressionDefinition,
   type EventContextKey,
   type EventSwitchMatrix,
   type MotionFrame,
   type RandomEventType,
 } from './types/contracts';
 
-type MainTab = 'status' | 'emotion' | 'metronome';
+type MainTab = 'status' | 'emotion' | 'metronome' | 'settings';
 
 const STORAGE_KEYS = {
   eventSwitches: 'desk_pet_event_switches_v1',
@@ -110,6 +114,33 @@ function isAudioFile(file: File): boolean {
 }
 
 export default function App() {
+  const { settings } = useSettings();
+  const [consoleHost, setConsoleHost] = useState<Window | null>(null);
+  const [petLocked, setPetLocked] = useState(false);
+  const [expressions, setExpressions] = useState<ExpressionDefinition[]>([]);
+  const [selectedId, setSelectedId] = useState('neutral');
+  const [baseId, setBaseId] = useState('neutral');
+  const [randomExpression, setRandomExpression] = useState<ExpressionDefinition | null>(null);
+  const randomEndRef = useRef<number | null>(null);
+  const soundRef = useRef<ReturnType<typeof createCompletionSound> | null>(null);
+  const [timerMode, setTimerMode] = useState<TimerMode>('countdown');
+  const timerModeRef = useRef(timerMode);
+  timerModeRef.current = timerMode;
+  const soundEnabledRef = useRef(settings.endSoundEnabled);
+  soundEnabledRef.current = settings.endSoundEnabled;
+
+  useEffect(() => {
+    const bridge = window.desktopPetBridge;
+    if (!bridge) return;
+    void bridge.getLocked().then(setPetLocked);
+    return bridge.onLocked(setPetLocked);
+  }, []);
+  const toggleLock = () => {
+    const bridge = window.desktopPetBridge;
+    if (bridge) void bridge.setLocked(!petLocked).then(setPetLocked);
+    else setPetLocked((value) => !value);
+  };
+
   // Audio Engine Refs (Frozen E1 / jh)
   const engineRef = useRef<E1 | null>(null);
   const getEngine = useCallback(() => {
@@ -121,7 +152,7 @@ export default function App() {
 
   const motionRef = useRef<MotionFrame>({ ...jh });
   const latestFrameRef = useRef<MotionFrame>({ ...jh });
-  const lastModeRef = useRef<Exclude<AudioSourceMode, 'idle'>>('demo');
+  const lastModeRef = useRef<Exclude<AudioSourceMode, 'idle'>>('system');
   const lastFileRef = useRef<File | null>(null);
   const audioStartedAtRef = useRef<number>(0);
 
@@ -145,7 +176,7 @@ export default function App() {
 
   // Panel / Tab / Stage State
   const [activeTab, setActiveTab] = useState<MainTab>('status');
-  const [collapsed, setCollapsed] = useState(false);
+
   const [assetReloadToken, setAssetReloadToken] = useState(0);
   const [assetStatus, setAssetStatus] = useState<{
     loaded: boolean;
@@ -154,17 +185,10 @@ export default function App() {
     error?: string;
   }>({ loaded: false });
 
-  // Draggable Character Stage State
-  const stageContainerRef = useRef<HTMLDivElement | null>(null);
-  const dragOffsetRef = useRef<{ dx: number; dy: number } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
-
   // Status / Study Timer / Emotion / Random Switches State
   const initialMinutes = useMemo(() => loadInitialMinutes(), []);
   const [activityMode, setActivityMode] = useState<ActivityMode>('chill');
-  const [emotion, setEmotion] = useState<EmotionType>('neutral');
-  const [setTimeEnabled, setSetTimeEnabled] = useState(true);
+
   const [studyMinutes, setStudyMinutes] = useState(initialMinutes);
   const [timerState, setTimerState] = useState<TimerState>('idle');
   const [totalMs, setTotalMs] = useState(initialMinutes * 60_000);
@@ -205,6 +229,8 @@ export default function App() {
     return () => {
       engineRef.current?.dispose();
       engineRef.current = null;
+      soundRef.current?.dispose();
+      soundRef.current = null;
       if (todoNoticeTimerRef.current !== null) {
         window.clearTimeout(todoNoticeTimerRef.current);
       }
@@ -267,12 +293,10 @@ export default function App() {
         setAudioMode(mode);
         setMusicRunning(true);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setAudioError(
-          msg.includes('Permission') || msg.includes('NotAllowed')
-            ? '权限被拒绝了。请检查权限设置，或改用「本地音乐」模式。'
-            : msg,
-        );
+        const name = err instanceof Error ? err.name : '';
+        setAudioError(name === 'NotAllowedError'
+          ? '未获得音频共享权限，请允许共享声音后重试。'
+          : '无法连接音频，请检查系统输出设备和共享音频设置后重试。');
         setMusicRunning(false);
       } finally {
         setAudioBusy(false);
@@ -300,7 +324,7 @@ export default function App() {
       void startAudio('file', lastFileRef.current);
       return;
     }
-    const target = lastModeRef.current === 'file' ? 'demo' : lastModeRef.current;
+    const target = lastModeRef.current === 'file' ? 'system' : lastModeRef.current;
     void startAudio(target);
   }, [musicRunning, startAudio, stopAudio]);
 
@@ -326,84 +350,35 @@ export default function App() {
         togglePlayLastAudio();
       } else if (e.key === 'h' || e.key === 'H') {
         e.preventDefault();
-        setCollapsed((v) => !v);
+        window.desktopPetBridge?.hideConsole();
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [stopAudio, togglePlayLastAudio]);
+    consoleHost?.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      consoleHost?.removeEventListener('keydown', onKeyDown);
+    };
+  }, [stopAudio, togglePlayLastAudio, consoleHost]);
 
   // Study Timer Countdown Effect
   useEffect(() => {
     if (timerState !== 'running') return;
     const tick = () => {
       if (timerEndAtRef.current === null) return;
-      const left = Math.max(0, timerEndAtRef.current - Date.now());
+      const left = timerValue(timerModeRef.current, timerEndAtRef.current, Date.now());
       setRemainingMs(left);
-      if (left <= 0) {
+      if (timerModeRef.current === 'countdown' && left <= 0) {
         timerEndAtRef.current = null;
         setTimerState('completed');
+        setModal('none');
+        if (soundEnabledRef.current) void soundRef.current?.play().catch(() => {});
       }
     };
     tick();
     const id = window.setInterval(tick, 200);
     return () => window.clearInterval(id);
   }, [timerState]);
-
-  // Clamp dragged character inside window on resize
-  useEffect(() => {
-    const onResize = () => {
-      setDragPos((pos) => {
-        if (!pos) return pos;
-        const el = stageContainerRef.current;
-        if (!el) return pos;
-        return {
-          x: Math.min(pos.x, Math.max(0, window.innerWidth - el.offsetWidth)),
-          y: Math.min(pos.y, Math.max(0, window.innerHeight - el.offsetHeight)),
-        };
-      });
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    const el = stageContainerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    dragOffsetRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
-    try {
-      el.setPointerCapture(e.pointerId);
-    } catch {
-      // Ignore pointer capture errors
-    }
-    setIsDragging(true);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const offset = dragOffsetRef.current;
-    const el = stageContainerRef.current;
-    if (!offset || !el) return;
-    const nextX = Math.min(
-      Math.max(0, e.clientX - offset.dx),
-      Math.max(0, window.innerWidth - el.offsetWidth),
-    );
-    const nextY = Math.min(
-      Math.max(0, e.clientY - offset.dy),
-      Math.max(0, window.innerHeight - el.offsetHeight),
-    );
-    setDragPos({ x: nextX, y: nextY });
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    dragOffsetRef.current = null;
-    setIsDragging(false);
-    try {
-      stageContainerRef.current?.releasePointerCapture(e.pointerId);
-    } catch {
-      // Ignore release errors
-    }
-  };
 
   // Drag & Drop audio file onto window
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -421,7 +396,7 @@ export default function App() {
       nextMode === 'chill' &&
       activityMode === 'study' &&
       timerState === 'running' &&
-      remainingMs > 0
+      (timerMode === 'stopwatch' || remainingMs > 0)
     ) {
       pendingPauseReasonRef.current = 'leave-study';
       setModal('confirm-leave-study');
@@ -431,15 +406,15 @@ export default function App() {
   };
 
   const handleChangeStudyMinutes = (mins: number) => {
-    const clamped = Math.max(1, Math.min(999, mins));
+    if (!Number.isFinite(mins)) return;
+    const clamped = Math.max(1, Math.min(999, Math.trunc(mins)));
     setStudyMinutes(clamped);
-    setSetTimeEnabled(true);
     try {
       localStorage.setItem(STORAGE_KEYS.studyMinutes, String(clamped));
     } catch {
       // Ignore storage error
     }
-    if (timerState === 'idle' || timerState === 'completed') {
+    if (timerMode === 'countdown' && (timerState === 'idle' || timerState === 'completed')) {
       const nextMs = clamped * 60_000;
       setTotalMs(nextMs);
       setRemainingMs(nextMs);
@@ -450,38 +425,35 @@ export default function App() {
   };
 
   const handleStartOrResumeTimer = () => {
-    if (timerState === 'paused' && remainingMs > 0) {
-      setActivityMode('study');
-      timerEndAtRef.current = Date.now() + remainingMs;
-      setTimerState('running');
-      return;
-    }
-    setSetTimeEnabled(true);
-    const ms = Math.max(1, Math.min(999, studyMinutes)) * 60_000;
-    setTotalMs(ms);
-    setRemainingMs(ms);
+    if (timerState === 'running') return;
+    soundRef.current ??= createCompletionSound();
+    soundRef.current.prepare();
+    const duration = studyMinutes * 60_000;
+    const value = timerState === 'paused' ? remainingMs : timerMode === 'countdown' ? duration : 0;
+    setTotalMs(duration);
+    setRemainingMs(value);
     setActivityMode('study');
-    timerEndAtRef.current = Date.now() + ms;
+    timerEndAtRef.current = timerMode === 'countdown' ? Date.now() + value : Date.now() - value;
     setTimerState('running');
   };
 
   const handleRequestPauseTimer = () => {
-    if (timerState !== 'running' || remainingMs <= 0) return;
+    if (timerState !== 'running') return;
     pendingPauseReasonRef.current = 'pause';
+    if (timerMode === 'stopwatch') { handleConfirmPause(); return; }
     setModal('confirm-pause');
   };
 
   const handleConfirmPause = () => {
-    const left =
-      timerEndAtRef.current !== null
-        ? Math.max(0, timerEndAtRef.current - Date.now())
-        : remainingMs;
+    const value = timerEndAtRef.current === null ? remainingMs
+      : timerValue(timerMode, timerEndAtRef.current, Date.now());
     timerEndAtRef.current = null;
-    setRemainingMs(left);
-    setTimerState('paused');
-    if (pendingPauseReasonRef.current === 'leave-study') {
-      setActivityMode('chill');
-    }
+    setRemainingMs(value);
+    if (timerMode === 'countdown' && value <= 0) {
+      setTimerState('completed');
+      if (soundEnabledRef.current) void soundRef.current?.play().catch(() => {});
+    } else setTimerState('paused');
+    if (pendingPauseReasonRef.current === 'leave-study') setActivityMode('chill');
     setModal('none');
   };
 
@@ -497,7 +469,7 @@ export default function App() {
     timerEndAtRef.current = null;
     const ms = Math.max(1, Math.min(999, studyMinutes)) * 60_000;
     setTotalMs(ms);
-    setRemainingMs(ms);
+    setRemainingMs(timerMode === 'countdown' ? ms : 0);
     setTimerState('idle');
   };
 
@@ -564,320 +536,112 @@ export default function App() {
     setModal('none');
   };
 
-  const platformTip = useMemo(() => {
-    if (typeof navigator === 'undefined') return null;
-    const ua = navigator.userAgent;
-    if (/Mac|iPod|iPhone|iPad/.test(ua)) {
-      return 'macOS 提示：如无法直接捕获系统声音，可选择标签页共享并勾选音频，或直接使用「本地音乐」。';
-    }
-    if (/Firefox/.test(ua)) {
-      return 'Firefox 提示：请选择「标签页」共享并勾选分享音频，或直接使用「本地音乐」。';
-    }
-    return null;
-  }, []);
+  const eligibleExpressions = expressions.filter((entry) => entry.random &&
+    (!entry.event || isRandomEventAllowed(entry.event, activityMode, musicRunning, eventSwitches)));
+  const poolKey = eligibleExpressions.map((entry) => entry.id).join('|');
+  const poolRef = useRef(eligibleExpressions);
+  poolRef.current = eligibleExpressions;
+  useEffect(() => {
+    setRandomExpression(null);
+    if (randomEndRef.current !== null) window.clearTimeout(randomEndRef.current);
+    if (!settings.randomEnabled) return;
+    const timer = window.setInterval(() => {
+      const pool = poolRef.current;
+      if (!pool.length) return;
+      if (randomEndRef.current !== null) window.clearTimeout(randomEndRef.current);
+      const entry = pool[Math.floor(Math.random() * pool.length)];
+      setRandomExpression(entry);
+      randomEndRef.current = window.setTimeout(() => setRandomExpression(null), entry.durationMs);
+    }, settings.randomIntervalSeconds * 1000);
+    return () => {
+      window.clearInterval(timer);
+      if (randomEndRef.current !== null) window.clearTimeout(randomEndRef.current);
+    };
+  }, [settings.randomEnabled, settings.randomIntervalSeconds, poolKey, expressions]);
+  const allowedExpression = (entry: ExpressionDefinition | undefined | null) =>
+    entry && (!entry.event || isRandomEventAllowed(entry.event, activityMode, musicRunning, eventSwitches)) ? entry : null;
+  const manualExpression = expressions.find((entry) => entry.id === selectedId);
+  const expression = allowedExpression(randomExpression) ??
+    (musicRunning && manualExpression?.event === 'doze' ? null : manualExpression);
+  const baseExpression = expression?.type === 'base' ? expression : expressions.find((entry) => entry.id === baseId);
+  const selectExpression = (id: string) => {
+    setRandomExpression(null);
+    if (randomEndRef.current !== null) window.clearTimeout(randomEndRef.current);
+    const nextId = expression?.id === id ? 'neutral' : id;
+    setSelectedId(nextId);
+    if (expressions.find((entry) => entry.id === nextId)?.type === 'base') setBaseId(nextId);
+  };
+  const changeTimerMode = (mode: TimerMode) => {
+    if (timerState === 'running' || timerState === 'paused') return;
+    timerEndAtRef.current = null;
+    setTimerMode(mode);
+    setTimerState('idle');
+    setRemainingMs(mode === 'countdown' ? studyMinutes * 60_000 : 0);
+  };
 
   const silenceText =
     !audioError && silenceHint
       ? '似乎没有捕获到声音：请确认音乐正在播放，并已在共享弹窗里勾选「分享音频」。'
       : null;
 
-  return (
-    <div
-      className={`anime-desktop-bg relative flex h-full w-full overflow-hidden ${isDragging ? 'dragging' : ''}`}
-      onDrop={handleDrop}
-      onDragOver={(e) => e.preventDefault()}
-    >
-      {/* Subtle Pastel Dot Background */}
-      <div className="anime-desktop-dots pointer-events-none absolute inset-0" />
-
-      {/* Top-Left Brand & Asset Status Badge */}
-      <header className="pointer-events-none absolute left-4 top-3.5 z-10 flex flex-wrap items-center gap-2">
-        <div className="anime-pill pointer-events-auto flex items-center gap-2 rounded-2xl px-3.5 py-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-[#6E4F75] bg-gradient-to-br from-[#FFD4E8] to-[#E9D5FF] text-sm">
-            🎵
-          </span>
-          <div>
-            <h1 className="text-[14px] font-extrabold tracking-wide text-[#4A3246]">
-              桌宠节奏师
-            </h1>
-            <p className="text-[10.5px] font-medium text-[#755873]">
-              二次元桌面伴侣 · 听歌律动 &amp; 自习打卡
-            </p>
-          </div>
-        </div>
-
-        <div
-          data-testid="asset-status"
-          className={`anime-pill pointer-events-auto rounded-full px-3 py-1 text-[11px] font-bold ${
-            assetStatus.error
-              ? 'text-[#BE123C]'
-              : assetStatus.loaded
-                ? 'text-[#6D28D9]'
-                : 'text-[#8A6B89]'
-          }`}
-          title={assetStatus.assetDirHint ?? ''}
-        >
-          {assetStatus.error
-            ? `⚠ ${assetStatus.error}`
-            : assetStatus.loaded
-              ? `✨ ${assetStatus.packName ?? '角色素材已就绪'}`
-              : '⏳ 正在加载角色素材…'}
-        </div>
-      </header>
-
-      {/* Main Layout: Left/Center Stage + Right Control Window */}
-      <div className="relative z-20 flex h-full w-full items-center justify-between gap-3 px-4 pb-3 pt-16 sm:px-5">
-        {/* Left/Center Character Stage */}
-        <div className="relative flex h-full min-w-0 flex-1 items-center justify-center">
-          <div
-            ref={stageContainerRef}
-            data-testid="character-stage-wrapper"
-            style={
-              dragPos
-                ? { position: 'fixed', left: dragPos.x, top: dragPos.y, zIndex: 25 }
-                : undefined
-            }
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onDoubleClick={() => setCollapsed((v) => !v)}
-            className={`relative aspect-square w-[min(540px,95%,74vh)] touch-none transition-shadow ${
-              isDragging ? 'cursor-grabbing' : 'cursor-grab'
-            }`}
-          >
-            {/* Friendly Bubble Above Head (Never Covers Face) */}
-            {!musicRunning && timerState !== 'running' && (
-              <div className="pointer-events-none absolute -top-3 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap">
-                <div className="anime-pill rounded-full px-3.5 py-1 text-[11.5px] font-bold text-[#583B5E]">
-                  {audioBusy
-                    ? '正在连接音源…'
-                    : '选个音源跟拍，或开启自习陪你一起加油 ✨'}
-                </div>
-              </div>
-            )}
-
-            <div className="h-full w-full overflow-hidden rounded-[30px] border-2 border-[#E6C7DA]/80 bg-white/40 shadow-[0_20px_48px_-14px_rgba(110,79,117,0.22)]">
-              <DeskCharacterScene
-                motionRef={motionRef}
-                musicRunning={musicRunning}
-                autoFollow={autoFollow}
-                activityMode={activityMode}
-                timerActive={timerState === 'running'}
-                emotion={emotion}
-                eventSwitches={eventSwitches}
-                assetReloadToken={assetReloadToken}
-                onAssetStatus={setAssetStatus}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right Floating Control Window (or Collapsed Compact Pill) */}
-        {collapsed ? (
-          <div
-            data-testid="collapsed-bar"
-            className="anime-window fixed bottom-4 right-4 z-30 flex items-center gap-2.5 rounded-2xl px-3.5 py-2"
-          >
-            <span className="text-[12.5px] font-extrabold text-[#4A3246]">🎵 桌宠节奏师</span>
-            {musicRunning && (
-              <span className="rounded-full bg-[#F3E8FF] px-2 py-0.5 font-mono text-[11px] font-bold text-[#7C3AED]">
-                {telemetry.bpm > 0 ? `${telemetry.bpm} BPM` : '测速中'}
-              </span>
-            )}
-            <button
-              type="button"
-              data-testid="btn-reload-assets"
-              onClick={() => setAssetReloadToken((n) => n + 1)}
-              className="cursor-pointer rounded-xl border border-[#D7C1D9] bg-white px-2 py-1 text-[11px] font-bold text-[#6E4F75] hover:bg-[#FFF0F6]"
-              title="重载素材"
-            >
-              🔄
-            </button>
-            <button
-              type="button"
-              data-testid="btn-toggle-collapse"
-              onClick={() => setCollapsed(false)}
-              className="cursor-pointer rounded-xl border-2 border-[#6E4F75] bg-[#FFF2B8] px-2.5 py-1 text-[11.5px] font-bold text-[#4A3246] hover:bg-[#FFE991]"
-              title="展开面板 (H)"
-            >
-              展开 [+]
-            </button>
-          </div>
-        ) : (
-          <aside className="z-30 flex max-h-[calc(100vh-28px)] w-[404px] shrink-0 flex-col">
-            {/* Main Window Box */}
-            <div
-              data-testid="main-control-window"
-              className="anime-window flex min-h-0 flex-col overflow-hidden rounded-[26px]"
-            >
-              {/* Title Bar */}
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b-2 border-[#6E4F75] bg-gradient-to-r from-[#FFE4F1] via-[#F3E8FF] to-[#FFF4D1] px-3.5 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-[#6E4F75] bg-white text-xs">
-                    ✦
-                  </span>
-                  <span className="text-[13.5px] font-extrabold text-[#4A3246]">
-                    桌宠节奏师
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    data-testid="btn-reload-assets"
-                    onClick={() => setAssetReloadToken((n) => n + 1)}
-                    className="cursor-pointer rounded-xl border border-[#CFAFC9] bg-white/90 px-2 py-1 text-[11px] font-bold text-[#583B5E] transition hover:bg-white active:translate-y-0.5"
-                    title="重载角色素材 (无需重启)"
-                  >
-                    🔄 重载素材
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="btn-toggle-collapse"
-                    onClick={() => setCollapsed(true)}
-                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-xl border border-[#6E4F75] bg-white/90 text-[12px] font-extrabold text-[#4A3246] transition hover:bg-[#FFF2B8]"
-                    title="收起面板 (快捷键 H)"
-                  >
-                    —
-                  </button>
-                </div>
-              </div>
-
-              {/* 3 Unlocked Tabs */}
-              <div className="grid shrink-0 grid-cols-3 gap-1.5 border-b border-[#EBD8E7] bg-[#FFF8FC] px-3 py-2">
-                <button
-                  type="button"
-                  data-testid="tab-status"
-                  onClick={() => setActiveTab('status')}
-                  className={`flex cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-xl border-2 px-1.5 py-1.5 text-[11px] font-bold transition ${
-                    activeTab === 'status'
-                      ? 'border-[#6E4F75] bg-[#FFF5D6] text-[#4A3246] shadow-[0_2px_0_#E6CE80]'
-                      : 'border-transparent bg-white/60 text-[#755873] hover:border-[#DFC6D8] hover:bg-white'
-                  }`}
-                >
-                  <ClockIcon size={14} />
-                  <span>Status 状态</span>
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="tab-emotion"
-                  onClick={() => setActiveTab('emotion')}
-                  className={`flex cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-xl border-2 px-1.5 py-1.5 text-[11px] font-bold transition ${
-                    activeTab === 'emotion'
-                      ? 'border-[#6E4F75] bg-[#FFE4EF] text-[#4A3246] shadow-[0_2px_0_#E6B9CE]'
-                      : 'border-transparent bg-white/60 text-[#755873] hover:border-[#DFC6D8] hover:bg-white'
-                  }`}
-                >
-                  <HeartIcon size={14} />
-                  <span>Emotion 情绪</span>
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="tab-metronome"
-                  onClick={() => setActiveTab('metronome')}
-                  className={`flex cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-xl border-2 px-1.5 py-1.5 text-[11px] font-bold transition ${
-                    activeTab === 'metronome'
-                      ? 'border-[#6E4F75] bg-[#EDE9FE] text-[#4A3246] shadow-[0_2px_0_#C7B8F5]'
-                      : 'border-transparent bg-white/60 text-[#755873] hover:border-[#DFC6D8] hover:bg-white'
-                  }`}
-                >
-                  <MetronomeIcon size={14} />
-                  <span>Metronome 节拍器</span>
-                </button>
-              </div>
-
-              {/* Active Tab Content */}
-              <div className="anime-scroll min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
-                {activeTab === 'status' && (
-                  <StatusTab
-                    activityMode={activityMode}
-                    onSelectActivityMode={handleSelectActivityMode}
-                    setTimeEnabled={setTimeEnabled}
-                    onToggleSetTime={() => setSetTimeEnabled((v) => !v)}
-                    studyMinutes={studyMinutes}
-                    onChangeStudyMinutes={handleChangeStudyMinutes}
-                    timerState={timerState}
-                    remainingMs={remainingMs}
-                    totalMs={totalMs}
-                    onStartOrResumeTimer={handleStartOrResumeTimer}
-                    onRequestPauseTimer={handleRequestPauseTimer}
-                    onResetTimer={handleResetTimer}
-                    eventSwitches={eventSwitches}
-                    onToggleEventSwitch={handleToggleEventSwitch}
-                    todoOpen={todoOpen}
-                    onToggleTodo={() => setTodoOpen((v) => !v)}
-                  />
-                )}
-
-                {activeTab === 'emotion' && (
-                  <EmotionTab emotion={emotion} onSelectEmotion={setEmotion} />
-                )}
-
-                {activeTab === 'metronome' && (
-                  <MetronomeTab
-                    mode={audioMode}
-                    running={musicRunning}
-                    busy={audioBusy}
-                    bpm={telemetry.bpm}
-                    level={telemetry.level}
-                    bass={telemetry.bass}
-                    beats={telemetry.beats}
-                    locked={telemetry.locked}
-                    sensitivity={sensitivity}
-                    fileName={fileName}
-                    error={audioError}
-                    silenceHint={silenceText}
-                    platformTip={platformTip}
-                    autoCheckBpm={autoCheckBpm}
-                    onToggleAutoCheckBpm={() => setAutoCheckBpm((v) => !v)}
-                    autoFollow={autoFollow}
-                    onToggleAutoFollow={() => setAutoFollow((v) => !v)}
-                    onSelectMode={(mode) => void startAudio(mode)}
-                    onSelectFile={(file) => void startAudio('file', file)}
-                    onSensitivityChange={setSensitivity}
-                    onStop={stopAudio}
-                  />
-                )}
-              </div>
-
-              {/* Shortcut Footer Hint */}
-              <div className="flex shrink-0 items-center justify-between border-t border-[#EFE1EC] bg-[#FFF9FC] px-3.5 py-1.5 text-[10.5px] font-semibold text-[#8A6B89]">
-                <span>Space 开始/停止 · Q 急停 · H 收起</span>
-                <span>拖拽人物可移动位置</span>
-              </div>
-            </div>
-
-            {/* Connected Todo Drawer Hanging Below Main Window */}
-            {activeTab === 'status' && (
-              <TodoDrawer
-                open={todoOpen}
-                listName={todoListName}
-                onListNameChange={setTodoListName}
-                items={todoItems}
-                onToggleItem={handleToggleTodoItem}
-                onUpdateItemText={handleUpdateTodoText}
-                onAddItem={handleAddTodoItem}
-                onRemoveItem={handleRemoveTodoItem}
-                onRequestSave={() => setModal('confirm-save-todo')}
-                savedNotice={todoSavedNotice}
-              />
-            )}
-          </aside>
-        )}
-      </div>
-
-      {/* Confirmation & Reminder Modals */}
-      <Modals
-        modal={modal}
-        onConfirmPause={handleConfirmPause}
-        onRejectPause={handleRejectPause}
-        onDismissGoBack={handleDismissGoBack}
-        onConfirmSaveTodo={handleConfirmSaveTodo}
-        onCancelSaveTodo={() => setModal('none')}
-      />
+  return <div className="pet-root anime-desktop-bg" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+    <div className="pet-toolbar">
+      <button className="action-button" data-testid="btn-open-console" onClick={() => window.desktopPetBridge?.showConsole()}>打开控制台</button>
+      <button className="action-button" data-testid="btn-lock-pet" onClick={toggleLock}>{petLocked ? '解除锁定' : '锁定'}</button>
     </div>
-  );
+    <div data-testid="character-stage-wrapper" className={`pet-stage ${petLocked ? 'pet-locked' : ''}`}>
+      <DeskCharacterScene motionRef={motionRef} musicRunning={musicRunning} autoFollow={autoFollow}
+        activityMode={activityMode} timerActive={timerState === 'running'} emotion="neutral"
+        expression={expression} baseExpression={baseExpression} forcedEventPreview={expression?.event ?? null} eventSwitches={eventSwitches}
+        assetReloadToken={assetReloadToken} onAssetStatus={setAssetStatus} onExpressionsLoaded={setExpressions} />
+    </div>
+    <FloatingConsole onWindow={setConsoleHost}>
+      <div className="console-content" onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}>
+        <header className="console-titlebar">
+          <strong>桌宠节奏师 · 控制台</strong>
+          <div className="flex gap-2">
+            <button className="action-button" data-testid="btn-reload-assets" onClick={() => setAssetReloadToken((n) => n + 1)}>重载素材</button>
+            <button className="action-button" aria-label="关闭控制台" data-testid="btn-close-console" onClick={() => window.desktopPetBridge?.hideConsole()}>关闭</button>
+          </div>
+        </header>
+        <nav className="grid grid-cols-4 gap-2 p-3">
+          {([{ id: 'status', label: '状态' }, { id: 'emotion', label: '情绪' },
+            { id: 'metronome', label: '音频同步' }, { id: 'settings', label: '设置' }] as const).map((tab) =>
+            <button key={tab.id} data-testid={`tab-${tab.id}`} className={`action-button ${activeTab === tab.id ? 'selected-expression' : ''}`}
+              aria-pressed={activeTab === tab.id} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
+        </nav>
+        <div className="anime-scroll console-scroll">
+          <p data-testid="asset-status" className="text-xs mb-3" title={assetStatus.assetDirHint}>
+            {assetStatus.error ? `素材加载失败：${assetStatus.error}` : assetStatus.loaded ? '角色素材已就绪' : '正在加载角色素材…'}
+          </p>
+          {activeTab === 'status' && <>
+            <StatusTab activityMode={activityMode} onSelectActivityMode={handleSelectActivityMode}
+              timerMode={timerMode} onChangeTimerMode={changeTimerMode}
+              studyMinutes={studyMinutes} onChangeStudyMinutes={handleChangeStudyMinutes}
+              timerState={timerState} remainingMs={remainingMs} totalMs={totalMs}
+              onStartOrResumeTimer={handleStartOrResumeTimer} onRequestPauseTimer={handleRequestPauseTimer}
+              onResetTimer={handleResetTimer} eventSwitches={eventSwitches} onToggleEventSwitch={handleToggleEventSwitch}
+              todoOpen={todoOpen} onToggleTodo={() => setTodoOpen((v) => !v)} />
+            <TodoDrawer open={todoOpen} listName={todoListName} onListNameChange={setTodoListName}
+              items={todoItems} onToggleItem={handleToggleTodoItem} onUpdateItemText={handleUpdateTodoText}
+              onAddItem={handleAddTodoItem} onRemoveItem={handleRemoveTodoItem}
+              onRequestSave={() => setModal('confirm-save-todo')} savedNotice={todoSavedNotice} />
+          </>}
+          {activeTab === 'emotion' && <EmotionTab expressions={expressions}
+            selectedId={expression?.id ?? 'neutral'} musicRunning={musicRunning} onSelectExpression={selectExpression} />}
+          {activeTab === 'metronome' && <MetronomeTab mode={audioMode} running={musicRunning} busy={audioBusy}
+            bpm={telemetry.bpm} level={telemetry.level} bass={telemetry.bass} beats={telemetry.beats} locked={telemetry.locked}
+            sensitivity={sensitivity} fileName={fileName} error={audioError} silenceHint={silenceText}
+            autoCheckBpm={autoCheckBpm} onToggleAutoCheckBpm={() => setAutoCheckBpm((v) => !v)}
+            autoFollow={autoFollow} onToggleAutoFollow={() => setAutoFollow((v) => !v)}
+            onSelectMode={(mode) => void startAudio(mode)} onSensitivityChange={setSensitivity} onStop={stopAudio} />}
+          {activeTab === 'settings' && <SettingsTab locked={petLocked} onToggleLock={toggleLock} />}
+        </div>
+        <footer className="p-3 text-xs">空格键：开始／停止 · Q 键：停止 · H 键：隐藏控制台<br />全局快捷键：Ctrl＋Alt＋C 打开控制台 · Ctrl＋Alt＋L 锁定／解锁</footer>
+        <Modals modal={modal} onConfirmPause={handleConfirmPause} onRejectPause={handleRejectPause}
+          onDismissGoBack={handleDismissGoBack} onConfirmSaveTodo={handleConfirmSaveTodo}
+          onCancelSaveTodo={() => setModal('none')} />
+      </div>
+    </FloatingConsole>
+  </div>;
 }

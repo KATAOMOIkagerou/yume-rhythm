@@ -1,10 +1,38 @@
-const { app, BrowserWindow, desktopCapturer, net, protocol, session } = require("electron");
+const { app, BrowserWindow, desktopCapturer, net, protocol, session, ipcMain, globalShortcut, Tray, Menu, nativeImage, shell, screen } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const isDev = !app.isPackaged;
+if (process.env.PET_DISABLE_GPU === "1") app.disableHardwareAcceleration();
+let petWindow;
+let consoleWindow;
+let tray;
+let locked = false;
+let quitting = false;
+
+function showConsole() {
+  if (consoleWindow && !consoleWindow.isDestroyed()) {
+    consoleWindow.show();
+    consoleWindow.focus();
+  }
+}
+
+function setLocked(value) {
+  locked = Boolean(value);
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.setMovable(!locked);
+    petWindow.setIgnoreMouseEvents(locked, { forward: true });
+    petWindow.webContents.send("pet:locked", locked);
+  }
+  tray?.setContextMenu(Menu.buildFromTemplate([
+    { label: "打开控制台", click: showConsole },
+    { label: locked ? "解除桌宠锁定" : "锁定桌宠（点击穿透）", click: () => setLocked(!locked) },
+    { type: "separator" },
+    { label: "退出桌宠节奏师", click: () => app.quit() },
+  ]));
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -135,12 +163,15 @@ function isViteServerReachable(urlString) {
 
 async function createWindow() {
   const window = new BrowserWindow({
-    width: 1120,
-    height: 780,
-    minWidth: 820,
-    minHeight: 620,
+    width: 540,
+    height: 590,
+    resizable: false,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    alwaysOnTop: true,
     title: "桌宠节奏师",
-    backgroundColor: "#fdf4f8",
+    backgroundColor: "#00000000",
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -150,6 +181,34 @@ async function createWindow() {
       backgroundThrottling: false,
       additionalArguments: [`--pet-external-asset-dir=${getExternalAssetDir()}`],
     },
+  });
+  petWindow = window;
+  window.on("close", () => { if (!quitting) app.quit(); });
+  window.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url !== "about:blank" || frameName !== "pet-console") return { action: "deny" };
+    const bounds = window.getBounds();
+    const area = screen.getDisplayMatching(bounds).workArea;
+    const preferredX = bounds.x + bounds.width + 12;
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions: {
+        width: 470, height: 780, minWidth: 430, minHeight: 500,
+        x: Math.max(area.x, Math.min(preferredX, area.x + area.width - 470)),
+        y: Math.max(area.y, Math.min(bounds.y, area.y + area.height - 780)),
+        alwaysOnTop: true,
+        title: "桌宠节奏师 · 控制台", frame: false, transparent: false,
+        backgroundColor: "#fff9fc", autoHideMenuBar: true,
+        webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+      },
+    };
+  });
+  window.webContents.on("did-create-window", (child) => {
+    consoleWindow = child;
+    child.setMenu(null);
+    child.on("close", (event) => {
+      if (!quitting) { event.preventDefault(); child.hide(); }
+    });
+    child.on("closed", () => { consoleWindow = undefined; });
   });
 
   if (isDev) {
@@ -181,9 +240,27 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  ipcMain.handle("pet:set-locked", (event, value) => {
+    if (event.sender !== petWindow?.webContents) return locked;
+    setLocked(value);
+    return locked;
+  });
+  ipcMain.handle("pet:get-locked", () => locked);
+  ipcMain.on("pet:show-console", showConsole);
+  ipcMain.on("pet:hide-console", () => consoleWindow?.hide());
+  ipcMain.on("pet:quit", () => app.quit());
+  ipcMain.on("pet:sound-settings", () => {
+    if (process.platform === "win32") void shell.openExternal("ms-settings:sound");
+  });
   registerPetAssetProtocol();
   configureMediaPermissions();
+  tray = new Tray(nativeImage.createFromPath(path.join(__dirname, "../dist/character_assets/head_base.png")).resize({ width: 24, height: 24 }));
+  tray.setToolTip("桌宠节奏师");
+  tray.on("double-click", showConsole);
   await createWindow();
+  setLocked(false);
+  globalShortcut.register("CommandOrControl+Alt+L", () => setLocked(!locked));
+  globalShortcut.register("CommandOrControl+Alt+C", showConsole);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -191,6 +268,9 @@ app.whenReady().then(async () => {
     }
   });
 });
+
+app.on("before-quit", () => { quitting = true; });
+app.on("will-quit", () => { globalShortcut.unregisterAll(); tray?.destroy(); });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

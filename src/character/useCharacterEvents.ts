@@ -17,9 +17,6 @@ const BLINK_MIN_DELAY_MS = 2400;
 const BLINK_MAX_DELAY_MS = 5200;
 const BLINK_DURATION_MS = 150;
 
-const EVENT_MIN_INTERVAL_MS = 8500;
-const EVENT_MAX_INTERVAL_MS = 14500;
-const EVENT_DURATION_MS = 3200;
 
 export interface UseCharacterEventsOptions {
   musicRunning: boolean;
@@ -76,7 +73,7 @@ export function useCharacterEvents({
   forcedEventPreview = null,
 }: UseCharacterEventsOptions): CharacterEventsState {
   const [blinkActive, setBlinkActive] = useState(false);
-  const [randomEvent, setRandomEvent] = useState<RandomEventType | null>(null);
+
 
   const allowedEvents = useMemo(
     () => getAllowedRandomEvents(activityMode, musicRunning, eventSwitches),
@@ -91,95 +88,14 @@ export function useCharacterEvents({
       }
       return forcedEventPreview;
     }
-    if (musicRunning && randomEvent === 'doze') {
-      return null;
-    }
-    return randomEvent;
-  }, [forcedEventPreview, musicRunning, randomEvent]);
+    return null;
+  }, [forcedEventPreview, musicRunning]);
 
   const suppressBlink =
     emotion === 'happy' || activeEvent === 'love' || activeEvent === 'doze';
 
-  const allowedEventsRef = useRef<RandomEventType[]>(allowedEvents);
-  allowedEventsRef.current = allowedEvents;
-
-  const forcedPreviewRef = useRef<RandomEventType | null | undefined>(forcedEventPreview);
-  forcedPreviewRef.current = forcedEventPreview;
-
-  const suppressBlinkRef = useRef<boolean>(suppressBlink);
+  const suppressBlinkRef = useRef(suppressBlink);
   suppressBlinkRef.current = suppressBlink;
-
-  const nextEventTimerRef = useRef<number | null>(null);
-  const endEventTimerRef = useRef<number | null>(null);
-  const scheduleNextEventRef = useRef<() => void>(() => {});
-
-  // Random event state machine (8.5s ~ 14.5s interval, 3200ms duration)
-  useEffect(() => {
-    let disposed = false;
-
-    const clearEventTimers = () => {
-      if (nextEventTimerRef.current !== null) {
-        window.clearTimeout(nextEventTimerRef.current);
-        nextEventTimerRef.current = null;
-      }
-      if (endEventTimerRef.current !== null) {
-        window.clearTimeout(endEventTimerRef.current);
-        endEventTimerRef.current = null;
-      }
-    };
-
-    const scheduleNext = () => {
-      if (disposed) return;
-      if (nextEventTimerRef.current !== null) {
-        window.clearTimeout(nextEventTimerRef.current);
-      }
-      nextEventTimerRef.current = window.setTimeout(() => {
-        nextEventTimerRef.current = null;
-        if (disposed) return;
-
-        const pool = allowedEventsRef.current;
-        if (forcedPreviewRef.current || pool.length === 0) {
-          scheduleNext();
-          return;
-        }
-
-        const chosen = pool[Math.floor(Math.random() * pool.length)];
-        setRandomEvent(chosen);
-
-        endEventTimerRef.current = window.setTimeout(() => {
-          endEventTimerRef.current = null;
-          if (disposed) return;
-          setRandomEvent(null);
-          scheduleNext();
-        }, EVENT_DURATION_MS);
-      }, randomBetween(EVENT_MIN_INTERVAL_MS, EVENT_MAX_INTERVAL_MS));
-    };
-
-    scheduleNextEventRef.current = scheduleNext;
-    scheduleNext();
-
-    return () => {
-      disposed = true;
-      clearEventTimers();
-    };
-  }, []);
-
-  // Immediately clear any active random event that is now prohibited (e.g. musicRunning starts while doze is active)
-  useEffect(() => {
-    if (
-      randomEvent !== null &&
-      !isRandomEventAllowed(randomEvent, activityMode, musicRunning, eventSwitches)
-    ) {
-      if (endEventTimerRef.current !== null) {
-        window.clearTimeout(endEventTimerRef.current);
-        endEventTimerRef.current = null;
-      }
-      setRandomEvent(null);
-      if (nextEventTimerRef.current === null) {
-        scheduleNextEventRef.current();
-      }
-    }
-  }, [randomEvent, activityMode, musicRunning, eventSwitches]);
 
   // Clear blink immediately when entering a suppressed expression/event
   useEffect(() => {

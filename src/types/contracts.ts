@@ -19,6 +19,22 @@ export type ActivityMode = 'chill' | 'study';
 
 export type EmotionType = 'neutral' | 'happy' | 'sad';
 
+export interface ExpressionDefinition {
+  id: string;
+  name: string;
+  type: 'base' | 'accessory';
+  resources: { animation?: string; eyes?: string; mouth?: string; overlay?: string };
+  durationMs: number;
+  random: boolean;
+  event?: RandomEventType;
+}
+
+export interface GlobalSettings {
+  endSoundEnabled: boolean;
+  randomEnabled: boolean;
+  randomIntervalSeconds: number;
+}
+
 export type RandomEventType = 'doze' | 'think' | 'shock' | 'love';
 
 export type EventContextKey = 'chill' | 'study' | 'music';
@@ -73,6 +89,9 @@ export interface DeskCharacterSceneProps {
   eventSwitches: EventSwitchMatrix;
   assetReloadToken: number;
   forcedEventPreview?: RandomEventType | null;
+  expression?: ExpressionDefinition | null;
+  baseExpression?: ExpressionDefinition | null;
+  onExpressionsLoaded?: (expressions: ExpressionDefinition[]) => void;
   onAssetStatus?: (status: {
     loaded: boolean;
     packName?: string;
@@ -85,6 +104,13 @@ export interface DesktopPetBridge {
   isElectron: boolean;
   assetProtocolBase: string;
   externalAssetDir: string;
+  setLocked: (value: boolean) => Promise<boolean>;
+  getLocked: () => Promise<boolean>;
+  onLocked: (callback: (value: boolean) => void) => () => void;
+  showConsole: () => void;
+  hideConsole: () => void;
+  quit: () => void;
+  openSoundSettings: () => void;
 }
 
 declare global {

@@ -62,13 +62,19 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
   eventSwitches,
   assetReloadToken,
   forcedEventPreview = null,
+  expression,
+  baseExpression,
+  onExpressionsLoaded,
   onAssetStatus,
 }) => {
   const { assets, error } = useCharacterAssets(assetReloadToken, onAssetStatus);
+  useEffect(() => {
+    if (assets) onExpressionsLoaded?.(assets.expressions);
+  }, [assets, onExpressionsLoaded]);
   const { isBlinking, activeEvent } = useCharacterEvents({
     musicRunning,
     activityMode,
-    emotion,
+    emotion: baseExpression?.id === 'happy' ? 'happy' : emotion,
     eventSwitches,
     forcedEventPreview,
   });
@@ -76,6 +82,7 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const headRigRef = useRef<HTMLDivElement | null>(null);
   const beatRingRef = useRef<SVGCircleElement | null>(null);
+  const accessoryRigRef = useRef<HTMLDivElement | null>(null);
   const [notes, setNotes] = useState<NoteParticle[]>([]);
   const noteTimersRef = useRef<Set<number>>(new Set());
 
@@ -212,6 +219,7 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
       const headEl = headRigRef.current;
       if (headEl) {
         headEl.style.transform = `translate3d(0px, ${finalHeadY.toFixed(2)}px, 0px) rotate(${finalHeadRot.toFixed(2)}deg) scale(${headScaleX.toFixed(3)}, ${headScaleY.toFixed(3)})`;
+        if (accessoryRigRef.current) accessoryRigRef.current.style.transform = headEl.style.transform;
       }
 
       const bodyEl = bodyRef.current;
@@ -244,30 +252,25 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
       noteTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       noteTimersRef.current.clear();
     };
-  }, [motionRef, Boolean(manifest)]);
+  }, [motionRef, manifest, baseExpression?.resources.animation]);
 
   const faceLayers = useMemo(() => {
     if (!manifest) return null;
-    const eventDef = activeEvent ? manifest.randomEvents[activeEvent] : undefined;
-    const exprDef = manifest.expressions[emotion] ?? manifest.expressions.neutral;
-
-    // Mutual-exclusion priority: activeEvent > blink (eyes only) > emotion
-    const eyesFile = eventDef
-      ? eventDef.eyes
-      : isBlinking
-        ? manifest.blinkEyes
-        : exprDef.eyes;
-    const mouthFile = eventDef ? eventDef.mouth : exprDef.mouth;
-    const fxFile = eventDef?.fx;
-
-    return { eyesFile, mouthFile, fxFile };
-  }, [manifest, activeEvent, emotion, isBlinking]);
+    const base = baseExpression ?? (expression?.type === 'base' ? expression : null);
+    const exprDef = base?.resources ?? manifest.expressions[emotion];
+    const accessory = expression?.type === 'accessory' ? expression.resources : undefined;
+    const eyesFile = accessory?.eyes ?? (isBlinking && !base?.resources.animation
+      ? manifest.blinkEyes : exprDef.eyes ?? manifest.expressions.neutral.eyes);
+    const mouthFile = accessory?.mouth ?? exprDef.mouth ?? manifest.expressions.neutral.mouth;
+    return { eyesFile, mouthFile, fxFile: accessory?.overlay ?? accessory?.animation,
+      baseFile: base?.resources.animation };
+  }, [manifest, expression, baseExpression, emotion, isBlinking]);
 
   if (!manifest || !urls || !faceLayers) {
     return (
       <div
         data-testid="character-scene"
-        className="relative flex aspect-square w-full items-center justify-center rounded-[28px] border border-pink-200/70 bg-gradient-to-b from-pink-50/80 to-purple-50/70 p-6 text-center text-sm text-purple-700/80"
+        className="relative flex aspect-square w-full items-center justify-center bg-transparent p-6 text-center text-sm text-purple-700/80"
       >
         {error ? (
           <div data-testid="character-asset-error" className="space-y-1.5">
@@ -296,20 +299,9 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
       data-music-running={String(musicRunning)}
       data-auto-follow={String(autoFollow)}
       data-timer-active={String(timerActive)}
-      className="relative aspect-square w-full select-none overflow-hidden rounded-[28px]"
+      className="relative aspect-square w-full select-none overflow-hidden"
     >
       <style>{SCENE_KEYFRAMES}</style>
-
-      {/* 1) Scene background (optional per manifest) */}
-      {manifest.showSceneBg && urls[manifest.layers.sceneBg] ? (
-        <img
-          src={urls[manifest.layers.sceneBg]}
-          alt=""
-          draggable={false}
-          data-testid="layer-scene-bg"
-          className={LAYER_IMG_CLASS}
-        />
-      ) : null}
 
       {/* Beat pulse ring behind character */}
       <svg
@@ -329,6 +321,12 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
         />
       </svg>
 
+      {faceLayers.baseFile ? <div ref={headRigRef} className="absolute inset-0"
+        data-testid="character-head-rig" data-emotion={expression?.id} data-expression-type="base"
+        style={{ transformOrigin: `${headOriginX} ${headOriginY}` }}>
+        <img src={urls[faceLayers.baseFile]} alt="" draggable={false}
+          data-testid="layer-base-animation" className={LAYER_IMG_CLASS} />
+      </div> : <>
       {/* 2) Chair back */}
       {urls[manifest.layers.chairBack] ? (
         <img
@@ -363,7 +361,8 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
         ref={headRigRef}
         data-testid="character-head-rig"
         data-active-event={activeEvent ?? ''}
-        data-emotion={emotion}
+        data-emotion={expression?.id ?? emotion}
+        data-expression-type={expression?.type ?? 'base'}
         data-blinking={String(isBlinking)}
         className="pointer-events-none absolute inset-0"
         style={{
@@ -448,18 +447,7 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
           />
         ) : null}
 
-        {/* Head event FX with gentle floating animation */}
-        {activeEvent && faceLayers.fxFile && urls[faceLayers.fxFile] ? (
-          <img
-            src={urls[faceLayers.fxFile]}
-            alt=""
-            draggable={false}
-            data-testid="layer-event-fx"
-            data-asset-file={faceLayers.fxFile}
-            className={LAYER_IMG_CLASS}
-            style={{ animation: 'charFxFloat 2.2s ease-in-out infinite' }}
-          />
-        ) : null}
+
       </div>
 
       {/* 5) Desk surface */}
@@ -520,6 +508,22 @@ export const DeskCharacterScene: React.FC<DeskCharacterSceneProps> = ({
         />
       ) : null}
 
+      </>}
+        {/* Head event FX with gentle floating animation */}
+        {faceLayers.fxFile && urls[faceLayers.fxFile] ? (
+          <div ref={accessoryRigRef} className="pointer-events-none absolute inset-0"
+            style={{ transformOrigin: `${headOriginX} ${headOriginY}`, willChange: 'transform' }}>
+          <img
+            src={urls[faceLayers.fxFile]}
+            alt=""
+            draggable={false}
+            data-testid="layer-event-fx"
+            data-asset-file={faceLayers.fxFile}
+            className={LAYER_IMG_CLASS}
+            style={{ animation: 'charFxFloat 2.2s ease-in-out infinite' }}
+          />
+          </div>
+        ) : null}
       {/* Floating beat musical note particles */}
       {notes.map((note) => (
         <span

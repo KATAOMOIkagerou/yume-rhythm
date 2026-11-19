@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CharacterManifest, DeskCharacterSceneProps } from '../types/contracts';
+import type { CharacterManifest, DeskCharacterSceneProps, ExpressionDefinition } from '../types/contracts';
+import { legacyExpressions, parseExpressions } from './expressions';
 
 export interface AssetBaseInfo {
   baseUrl: string;
@@ -7,6 +8,7 @@ export interface AssetBaseInfo {
 }
 
 export interface LoadedCharacterAssets {
+  expressions: ExpressionDefinition[];
   manifest: CharacterManifest;
   urls: Record<string, string>;
   assetDirHint: string;
@@ -50,7 +52,7 @@ export function collectManifestFiles(manifest: CharacterManifest): string[] {
     }
   };
 
-  Object.values(manifest.layers).forEach((file) => add(file));
+  Object.entries(manifest.layers).forEach(([key, file]) => { if (key !== 'sceneBg') add(file); });
   Object.values(manifest.expressions).forEach((expr) => {
     add(expr.eyes);
     add(expr.mouth);
@@ -67,7 +69,7 @@ export function collectManifestFiles(manifest: CharacterManifest): string[] {
 
 function validateManifest(raw: unknown): CharacterManifest {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('manifest.json 格式无效：根节点不是对象');
+    throw new Error('角色清单格式无效：根节点不是对象');
   }
   const m = raw as Partial<CharacterManifest>;
   if (
@@ -79,7 +81,7 @@ function validateManifest(raw: unknown): CharacterManifest {
     typeof m.canvasWidth !== 'number' ||
     typeof m.canvasHeight !== 'number'
   ) {
-    throw new Error('manifest.json 缺少必需字段（layers/expressions/blinkEyes/randomEvents/headPivot）');
+    throw new Error('角色清单缺少必需的图层、表情、眨眼、随机事件或支点配置');
   }
   return m as CharacterManifest;
 }
@@ -146,12 +148,17 @@ export async function loadCharacterAssets(
     signal,
   });
   if (!response.ok) {
-    throw new Error(`无法读取 manifest.json (HTTP ${response.status}): ${manifestUrl}`);
+    throw new Error(`无法读取角色清单，响应状态码：${response.status}`);
   }
 
   const rawManifest: unknown = await response.json();
   const manifest = validateManifest(rawManifest);
-  const files = collectManifestFiles(manifest);
+  const expressionResponse = await fetch(buildVersionedUrl(baseUrl, 'expressions.json', reloadToken), { cache: 'no-store', signal });
+  const expressions = expressionResponse.status === 404 ? legacyExpressions(manifest)
+    : expressionResponse.ok ? parseExpressions(await expressionResponse.json())
+    : (() => { throw new Error('无法读取表情配置'); })();
+  const files = [...new Set([...collectManifestFiles(manifest),
+    ...expressions.flatMap((entry) => Object.values(entry.resources))])];
 
   const urls: Record<string, string> = {};
   for (const file of files) {
@@ -161,6 +168,7 @@ export async function loadCharacterAssets(
   await Promise.all(files.map((file) => preloadImage(urls[file], file, signal)));
 
   return {
+    expressions,
     manifest,
     urls,
     assetDirHint,
@@ -209,7 +217,8 @@ export function useCharacterAssets(
       .catch((err: unknown) => {
         if (cancelled) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        const message = err instanceof Error ? err.message : String(err);
+        const rawMessage = err instanceof Error ? err.message : '';
+        const message = /[\u4e00-\u9fff]/.test(rawMessage) ? rawMessage : '素材加载失败，请确认素材文件完整后重新加载。';
         setState((prev) => ({
           assets: prev.assets,
           loading: false,

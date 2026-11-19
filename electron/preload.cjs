@@ -1,4 +1,4 @@
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 const path = require("node:path");
 
 function resolveExternalAssetDir() {
@@ -16,4 +16,15 @@ contextBridge.exposeInMainWorld("desktopPetBridge", {
   isElectron: true,
   assetProtocolBase: "pet-asset://local",
   externalAssetDir: resolveExternalAssetDir(),
+  setLocked: (value) => ipcRenderer.invoke("pet:set-locked", value),
+  getLocked: () => ipcRenderer.invoke("pet:get-locked"),
+  onLocked: (callback) => {
+    const listener = (_event, value) => callback(value);
+    ipcRenderer.on("pet:locked", listener);
+    return () => ipcRenderer.removeListener("pet:locked", listener);
+  },
+  showConsole: () => ipcRenderer.send("pet:show-console"),
+  hideConsole: () => ipcRenderer.send("pet:hide-console"),
+  quit: () => ipcRenderer.send("pet:quit"),
+  openSoundSettings: () => ipcRenderer.send("pet:sound-settings"),
 });

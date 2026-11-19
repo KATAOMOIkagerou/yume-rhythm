@@ -6,7 +6,7 @@
   "headPivot": { "x": 400, "y": 452 },
   "nodAmplitudeScale": 1.0,
   "nodTiltScale": 1.0,
-  "showSceneBg": true,
+  "showSceneBg": false,
   "showMusicHeadphones": true,
   "layers": {
     "sceneBg": "scene_bg.png",

@@ -9,6 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "start": "electron .",
     "verify:audio": "node scripts/verify-audio-frozen.mjs",
+    "verify:features": "node scripts/verify-features.mjs",
+    "verify:desktop": "node scripts/verify-desktop.mjs",
     "gen:assets": "node scripts/generate-anime-assets.mjs",
     "package:win": "node scripts/build-share-package.mjs"
   },

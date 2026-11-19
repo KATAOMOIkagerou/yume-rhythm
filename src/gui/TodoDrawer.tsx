@@ -40,7 +40,7 @@ export function TodoDrawer({
       className="drawer-drop anime-drawer mx-3 rounded-b-[22px] px-4 pb-3.5 pt-3"
     >
       <div className="mb-2 flex items-center gap-2">
-        <span className="shrink-0 text-[12px] font-bold text-[#6E4F75]">list name</span>
+        <span className="shrink-0 text-[12px] font-bold text-[#6E4F75]">清单名称</span>
         <input
           type="text"
           data-testid="todo-list-name"
@@ -121,7 +121,7 @@ export function TodoDrawer({
             onClick={onRequestSave}
             className="cursor-pointer rounded-xl border-2 border-[#6E4F75] bg-[#FFF2B8] px-3 py-1 text-[12px] font-bold text-[#4A3246] shadow-[0_2px_0_#E6CE80] transition hover:bg-[#FFE991] active:translate-y-0.5"
           >
-            save list / 保存清单
+            保存清单
           </button>
         </div>
       </div>

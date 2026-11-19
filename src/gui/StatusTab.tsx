@@ -5,15 +5,16 @@ import type {
   EventSwitchMatrix,
   RandomEventType,
 } from '../types/contracts';
+import type { TimerMode } from '../state/timer';
 import { CheckIcon, ClockIcon, PauseIcon, PlayIcon, StripedProgressBar } from './Icons';
 
 export type TimerState = 'idle' | 'running' | 'paused' | 'completed';
 
 export interface StatusTabProps {
+  timerMode: TimerMode;
+  onChangeTimerMode: (mode: TimerMode) => void;
   activityMode: ActivityMode;
   onSelectActivityMode: (mode: ActivityMode) => void;
-  setTimeEnabled: boolean;
-  onToggleSetTime: () => void;
   studyMinutes: number;
   onChangeStudyMinutes: (minutes: number) => void;
   timerState: TimerState;
@@ -49,10 +50,10 @@ const CONTEXT_COLS: { key: EventContextKey; label: string }[] = [
 ];
 
 export function StatusTab({
+  timerMode,
+  onChangeTimerMode,
   activityMode,
   onSelectActivityMode,
-  setTimeEnabled,
-  onToggleSetTime,
   studyMinutes,
   onChangeStudyMinutes,
   timerState,
@@ -111,7 +112,7 @@ export function StatusTab({
             >
               <CheckIcon size={11} />
             </span>
-            <span className="text-[12.5px] font-bold text-[#4A3246]">Study (自习)</span>
+            <span className="text-[12.5px] font-bold text-[#4A3246]">自习</span>
           </button>
 
           <button
@@ -133,34 +134,25 @@ export function StatusTab({
             >
               <CheckIcon size={11} />
             </span>
-            <span className="text-[12.5px] font-bold text-[#4A3246]">Chill (休闲)</span>
+            <span className="text-[12.5px] font-bold text-[#4A3246]">休闲</span>
           </button>
         </div>
       </div>
 
+      <label className="flex items-center justify-between gap-2 text-sm font-bold">计时模式
+        <select data-testid="timer-mode" value={timerMode} disabled={isRunning || isPaused}
+          onChange={(e) => onChangeTimerMode(e.target.value as TimerMode)} className="rounded border bg-white p-2">
+          <option value="countdown">倒计时</option><option value="stopwatch">正计时（秒表）</option>
+        </select>
+      </label>
       {/* Timer Control Card */}
       <div className="anime-card-cream rounded-2xl px-3.5 py-2.5">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              data-testid="toggle-set-time"
-              onClick={onToggleSetTime}
-              className="flex cursor-pointer items-center gap-1.5 text-[12px] font-bold text-[#4A3246]"
-            >
-              <span
-                className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded border-2 ${
-                  setTimeEnabled
-                    ? 'border-[#6E4F75] bg-[#F472B6] text-white'
-                    : 'border-[#8D6E92] bg-white text-transparent'
-                }`}
-              >
-                <CheckIcon size={11} />
-              </span>
-              <span>Set time for</span>
-            </button>
+          <div className="flex items-center gap-1.5" hidden={timerMode === 'stopwatch'}>
+            <label htmlFor="study-minutes">设置时间</label>
 
             <input
+              id="study-minutes"
               type="number"
               min={1}
               max={999}
@@ -188,7 +180,7 @@ export function StatusTab({
               }}
               className="w-14 rounded-lg border-2 border-[#D4BC7E] bg-white px-1.5 py-0.5 text-center font-mono text-[13px] font-bold text-[#4A3246] outline-none focus:border-[#6E4F75] disabled:bg-[#FFF9E6] disabled:text-[#8E7668]"
             />
-            <span className="text-[12px] font-bold text-[#6E4F75]">min</span>
+            <span className="text-[12px] font-bold text-[#6E4F75]">分钟</span>
           </div>
 
           <div className="flex items-center gap-1.5 text-[#6E4F75]">
@@ -213,7 +205,7 @@ export function StatusTab({
                     : 'text-[#4A3246]'
             }`}
           >
-            {formatMs(remainingMs)}
+            {formatMs(timerMode === 'stopwatch' ? Math.floor(remainingMs / 1000) * 1000 : remainingMs)}
           </div>
 
           <div className="flex items-center gap-2">
@@ -273,13 +265,13 @@ export function StatusTab({
             className="mt-2.5 rounded-xl border-2 border-dashed border-[#A78BFA] bg-[#F8F5FF] p-2.5"
           >
             <div className="mb-1.5 flex items-center justify-between text-[11.5px] font-bold text-[#5B21B6]">
-              <span>pausing... 暂停保留中</span>
+              <span>已暂停，保留进度</span>
               <span data-testid="pausing-remaining" className="font-mono tabular-nums">
-                剩余 {formatMs(remainingMs)}
+                {timerMode === 'stopwatch' ? '已计时 ' : '剩余 '}{formatMs(timerMode === 'stopwatch' ? Math.floor(remainingMs / 1000) * 1000 : remainingMs)}
               </span>
             </div>
 
-            <StripedProgressBar progress={progressRatio} animated />
+            {timerMode === 'countdown' && <StripedProgressBar progress={progressRatio} animated />}
 
             <div className="mt-2 flex items-center justify-end gap-2">
               <button
@@ -296,7 +288,7 @@ export function StatusTab({
                 onClick={onStartOrResumeTimer}
                 className="cursor-pointer rounded-xl border-2 border-[#6E4F75] bg-[#FFF2B8] px-3 py-1 text-[11.5px] font-bold text-[#4A3246] shadow-[0_2px_0_#E6CE80] transition hover:bg-[#FFE991] active:translate-y-0.5"
               >
-                continue / 继续
+                继续
               </button>
             </div>
           </div>
@@ -380,7 +372,7 @@ export function StatusTab({
               : 'bg-[#FFF5D6] shadow-[0_2px_0_#E6CE80] hover:bg-[#FFECAC]'
           }`}
         >
-          📝 to do list / 待办清单 {todoOpen ? '▲' : '▼'}
+          📝 待办清单 {todoOpen ? '▲' : '▼'}
         </button>
       </div>
     </div>
