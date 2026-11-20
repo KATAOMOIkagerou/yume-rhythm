@@ -1,0 +1,321 @@
+{
+  "exe": "D:\\coding\\pet\\yume-rhythm\\rust-desktop\\bin\\桌宠节奏师.exe",
+  "stages": [
+    {
+      "id": "baseline_before",
+      "disabled": false,
+      "start": "2026-11-20T11:40:31.387Z",
+      "heapBefore": {
+        "usedSize": 3620408,
+        "totalSize": 5505024,
+        "embedderHeapUsedSize": 1621328,
+        "backingStorageSize": 25805932
+      },
+      "updatesBefore": 257,
+      "end": "2026-11-20T11:40:51.403Z",
+      "updatesAfter": 575,
+      "heapAfter": {
+        "usedSize": 2634328,
+        "totalSize": 6815744,
+        "embedderHeapUsedSize": 1328112,
+        "backingStorageSize": 4140128
+      }
+    },
+    {
+      "id": "mask_disabled",
+      "disabled": true,
+      "start": "2026-11-20T11:40:54.461Z",
+      "heapBefore": {
+        "usedSize": 2594160,
+        "totalSize": 3407872,
+        "embedderHeapUsedSize": 1594720,
+        "backingStorageSize": 2865690
+      },
+      "updatesBefore": 576,
+      "end": "2026-11-20T11:41:14.476Z",
+      "updatesAfter": 583,
+      "heapAfter": {
+        "usedSize": 2581116,
+        "totalSize": 4194304,
+        "embedderHeapUsedSize": 1591880,
+        "backingStorageSize": 2865746
+      }
+    },
+    {
+      "id": "baseline_after",
+      "disabled": false,
+      "start": "2026-11-20T11:41:17.510Z",
+      "heapBefore": {
+        "usedSize": 2715324,
+        "totalSize": 5505024,
+        "embedderHeapUsedSize": 1554448,
+        "backingStorageSize": 5414656
+      },
+      "updatesBefore": 628,
+      "end": "2026-11-20T11:41:37.516Z",
+      "updatesAfter": 949,
+      "heapAfter": {
+        "usedSize": 4193152,
+        "totalSize": 7077888,
+        "embedderHeapUsedSize": 1899664,
+        "backingStorageSize": 37275972
+      }
+    }
+  ],
+  "startedAt": "2026-11-20T11:40:14.354Z",
+  "rootPid": 30920,
+  "timelineTop": [
+    {
+      "name": "RunTask",
+      "count": 11502,
+      "ms": 10286.587000000394
+    },
+    {
+      "name": "FireAnimationFrame",
+      "count": 675,
+      "ms": 1044.2609999999997
+    },
+    {
+      "name": "FunctionCall",
+      "count": 966,
+      "ms": 1023.0529999999992
+    },
+    {
+      "name": "GPUTask",
+      "count": 439,
+      "ms": 481.80700000000036
+    },
+    {
+      "name": "Commit",
+      "count": 518,
+      "ms": 40.84699999999999
+    },
+    {
+      "name": "V8.GC_MC_BACKGROUND_MARKING",
+      "count": 61,
+      "ms": 38.12600000000001
+    },
+    {
+      "name": "UpdateLayoutTree",
+      "count": 192,
+      "ms": 13.683000000000003
+    },
+    {
+      "name": "Decode LazyPixelRef",
+      "count": 8,
+      "ms": 13.527000000000001
+    },
+    {
+      "name": "Decode Image",
+      "count": 8,
+      "ms": 12.955000000000002
+    },
+    {
+      "name": "Layerize",
+      "count": 481,
+      "ms": 12.492
+    },
+    {
+      "name": "PrePaint",
+      "count": 481,
+      "ms": 12.213999999999992
+    },
+    {
+      "name": "MajorGC",
+      "count": 6,
+      "ms": 8.107999999999999
+    },
+    {
+      "name": "V8.GC_MARK_COMPACTOR",
+      "count": 6,
+      "ms": 7.8229999999999995
+    },
+    {
+      "name": "V8.GC_MC_INCREMENTAL",
+      "count": 63,
+      "ms": 6.875999999999999
+    },
+    {
+      "name": "V8.GC_MC_BACKGROUND_SWEEPING",
+      "count": 30,
+      "ms": 6.780000000000002
+    },
+    {
+      "name": "ImageDecodeTask",
+      "count": 4,
+      "ms": 5.739000000000001
+    },
+    {
+      "name": "TimerFire",
+      "count": 71,
+      "ms": 5.682000000000001
+    },
+    {
+      "name": "MinorGC",
+      "count": 6,
+      "ms": 4.493
+    },
+    {
+      "name": "ImageUploadTask",
+      "count": 4,
+      "ms": 4.03
+    },
+    {
+      "name": "V8.GC_MC_INCREMENTAL_EMBEDDER_TRACING",
+      "count": 63,
+      "ms": 3.651
+    },
+    {
+      "name": "V8.GC_SCAVENGER",
+      "count": 6,
+      "ms": 3.19
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE",
+      "count": 6,
+      "ms": 3.105
+    },
+    {
+      "name": "V8.GC_MC_CLEAR",
+      "count": 6,
+      "ms": 2.7830000000000004
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE",
+      "count": 12,
+      "ms": 2.6159999999999997
+    },
+    {
+      "name": "V8.GC_MC_CLEAR_JOIN_JOB",
+      "count": 6,
+      "ms": 2.596
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE_UPDATE_POINTERS",
+      "count": 6,
+      "ms": 1.514
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL_PHASE",
+      "count": 6,
+      "ms": 1.4480000000000002
+    },
+    {
+      "name": "V8.GC_MC_CLEAR_STRING_TABLE",
+      "count": 48,
+      "ms": 1.3230000000000002
+    },
+    {
+      "name": "Paint",
+      "count": 10,
+      "ms": 1.17
+    },
+    {
+      "name": "UpdateLayer",
+      "count": 689,
+      "ms": 1.0919999999999963
+    },
+    {
+      "name": "V8.GC_HEAP_ENSURE_SWEEPING_COMPLETED",
+      "count": 12,
+      "ms": 0.9810000000000001
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE_COPY",
+      "count": 6,
+      "ms": 0.969
+    },
+    {
+      "name": "V8.GC_MC_CLEAR_SWEEP_EXTERNAL_POINTER_TABLE",
+      "count": 6,
+      "ms": 0.9229999999999999
+    },
+    {
+      "name": "V8.GC_MC_INCREMENTAL_START",
+      "count": 6,
+      "ms": 0.8800000000000001
+    },
+    {
+      "name": "V8.GC_MC_MARK",
+      "count": 6,
+      "ms": 0.871
+    },
+    {
+      "name": "RasterTask",
+      "count": 20,
+      "ms": 0.8340000000000003
+    },
+    {
+      "name": "V8.GC_SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL",
+      "count": 12,
+      "ms": 0.803
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE_UPDATE_POINTERS_TO_NEW_ROOTS",
+      "count": 6,
+      "ms": 0.7999999999999999
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE_COPY_PARALLEL",
+      "count": 6,
+      "ms": 0.689
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_WEAK_GLOBAL_HANDLES_PROCESS",
+      "count": 6,
+      "ms": 0.518
+    },
+    {
+      "name": "V8.GC_MC_MARK_FULL_CLOSURE_PARALLEL",
+      "count": 6,
+      "ms": 0.49199999999999994
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_WEAK_GLOBAL_HANDLES_IDENTIFY",
+      "count": 6,
+      "ms": 0.447
+    },
+    {
+      "name": "V8.GC_MC_MARK_ROOTS",
+      "count": 18,
+      "ms": 0.41100000000000003
+    },
+    {
+      "name": "V8.GC_MC_EVACUATE_UPDATE_POINTERS_POINTER_TABLES",
+      "count": 6,
+      "ms": 0.407
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_PARALLEL",
+      "count": 5,
+      "ms": 0.364
+    },
+    {
+      "name": "V8.GC_SCAVENGER_TRACED_HANDLES_RESET_PARALLEL",
+      "count": 6,
+      "ms": 0.363
+    },
+    {
+      "name": "EventDispatch",
+      "count": 4,
+      "ms": 0.357
+    },
+    {
+      "name": "PaintImage",
+      "count": 5,
+      "ms": 0.355
+    },
+    {
+      "name": "HitTest",
+      "count": 8,
+      "ms": 0.34099999999999997
+    },
+    {
+      "name": "V8.GC_SCAVENGER_SCAVENGE_FINALIZE",
+      "count": 6,
+      "ms": 0.332
+    }
+  ],
+  "complete": true,
+  "finishedAt": "2026-11-20T11:41:46.015Z"
+}

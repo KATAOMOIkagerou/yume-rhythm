@@ -1,0 +1,52 @@
+{
+  "rootPid": 30120,
+  "debugging": false,
+  "startedAt": "2026-11-20T11:43:33.809Z",
+  "start": "2026-11-20T11:43:48.826Z",
+  "end": "2026-11-20T11:44:23.828Z",
+  "processes": [
+    {
+      "ProcessId": 30120,
+      "ParentProcessId": 36352,
+      "Name": "�������ʦ.exe",
+      "CommandLine": "D:\\coding\\pet\\yume-rhythm\\rust-desktop\\bin\\�������ʦ.exe"
+    },
+    {
+      "ProcessId": 23668,
+      "ParentProcessId": 30120,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --embedded-browser-webview=1 --webview-exe-name=�������ʦ.exe --user-data-dir=\"D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView\" --noerrdialogs --embedded-browser-webview-dpi-awareness=2 --autoplay-policy=no-user-gesture-required --disable-background-timer-throttling --disable-renderer-backgrounding --lang=zh-CN --mojo-named-platform-channel-pipe=30120.6320.7448966082592850269 /pfhostedapp:87681722f29ca67ce5e14b04006db7b6217a5f5e"
+    },
+    {
+      "ProcessId": 8972,
+      "ParentProcessId": 23668,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --type=crashpad-handler --user-data-dir=D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView /prefetch:4 /pfhostedapp:87681722f29ca67ce5e14b04006db7b6217a5f5e --monitor-self-annotation=ptype=crashpad-handler --user-stream-region=324,65568 --database=D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView\\Crashpad --metrics-dir=D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView --annotation=IsOfficialBuild=1 --annotation=channel= --annotation=chromium-version=157.0.8103.80 \"--annotation=exe=C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --annotation=plat=Win64 \"--annotation=prod=Edge WebView2\" --annotation=ver=157.0.4341.60 --initial-client-data=0x188,0x18c,0x190,0x164,0x198,0x7ffd23e1b3a0,0x7ffd23e1b3b0,0x7ffd23e1b3c0"
+    },
+    {
+      "ProcessId": 32928,
+      "ParentProcessId": 23668,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --type=gpu-process --gpu-recent-crash-count=0 --noerrdialogs --user-data-dir=\"D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView\" --webview-exe-name=�������ʦ.exe --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --gpu-preferences=WAAAAAAAAABgAAACAAAAAAAAAAAAAGAAQAAAAAAAAAADAAAAAAAAADgAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAKAAAAAAAAAAoAAAAAAAAAAgAAAAAAAAAEAAAAAIAAAABAAAAAAAAAAgAAAAAAAAACAAAAAAAAAA= --startup-read-main-dll --metrics-shmem-handle=1980,i,13280471410834176354,14021210877057788461,262144 --field-trial-handle=2076,i,10654552960388565261,4022594063485491866,262144 --variations-seed-version --pseudonymization-salt-handle=2092,i,14840474566101136600,129611044016021859,4 --trace-process-track-uuid=3190708988185955192 --mojo-platform-channel-handle=2088 /prefetch:2 /pfhostedapp:87681722f29ca67ce5e14b04006db7b6217a5f5e"
+    },
+    {
+      "ProcessId": 1460,
+      "ParentProcessId": 23668,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --type=utility --utility-sub-type=network.mojom.NetworkService --lang=zh-CN --service-sandbox-type=none --noerrdialogs --user-data-dir=\"D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView\" --webview-exe-name=�������ʦ.exe --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --startup-read-main-dll --metrics-shmem-handle=1964,i,13827960200267440815,9075359801723338357,524288 --field-trial-handle=2076,i,10654552960388565261,4022594063485491866,262144 --variations-seed-version --pseudonymization-salt-handle=2092,i,14840474566101136600,129611044016021859,4 --trace-process-track-uuid=3190708989122997041 --mojo-platform-channel-handle=2260 /prefetch:11 /pfhostedapp:87681722f29ca67ce5e14b04006db7b6217a5f5e"
+    },
+    {
+      "ProcessId": 21336,
+      "ParentProcessId": 23668,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --type=utility --utility-sub-type=storage.mojom.StorageService --lang=zh-CN --service-sandbox-type=service --noerrdialogs --user-data-dir=\"D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView\" --webview-exe-name=�������ʦ.exe --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --startup-read-main-dll --metrics-shmem-handle=2712,i,10859423644426111225,42643481030863087,524288 --field-trial-handle=2076,i,10654552960388565261,4022594063485491866,262144 --variations-seed-version --pseudonymization-salt-handle=2092,i,14840474566101136600,129611044016021859,4 --trace-process-track-uuid=3190708990060038890 --mojo-platform-channel-handle=2728 /prefetch:13 /pfhostedapp:87681722f29ca67ce5e14b04006db7b6217a5f5e"
+    },
+    {
+      "ProcessId": 18020,
+      "ParentProcessId": 23668,
+      "Name": "msedgewebview2.exe",
+      "CommandLine": "\"C:\\Program Files (x86)\\Microsoft\\EdgeWebView\\Application\\157.0.4341.60\\msedgewebview2.exe\" --type=renderer --noerrdialogs --user-data-dir=\"D:\\coding\\pet\\yume-rhythm\\rust-desktop\\verification\\normal-1795175013787\\profile\\EBWebView\" --webview-exe-name=�������ʦ.exe --embedded-browser-webview=1 --embedded-browser-webview-dpi-awareness=2 --autoplay-policy=no-user-gesture-required --disable-background-timer-throttling --video-capture-use-gpu-memory-buffer --lang=zh-CN --device-scale-factor=2 --num-raster-threads=4 --enable-main-frame-before-activation --renderer-client-id=5 --ssd-no-pressure-read-main-dll --launch-time-ticks=653501870494 --metrics-shmem-handle=4044,i,14250446523016385351,14782782631412298990,1048576 --field-trial-handle=2076,i,10654552960388565261,4022594063485491866,262144 --variations-seed-version --pseudonymization-salt-handle=2092,i,14840474566101136600,129611044016021859,4 --trace-process-track-uuid=3190708990997080739 --mojo-platform-channel-handle=4060 /pfhostedapp:87681722f29ca67ce5e14b04006db7b6217a5f5e /prefetch:1"
+    }
+  ],
+  "complete": true
+}

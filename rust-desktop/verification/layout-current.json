@@ -1,0 +1,364 @@
+{
+  "status": {
+    "btn-reload-assets": {
+      "x": 332,
+      "y": 12,
+      "width": 71,
+      "height": 33
+    },
+    "btn-close-console": {
+      "x": 411,
+      "y": 12,
+      "width": 47,
+      "height": 33
+    },
+    "tab-status": {
+      "x": 12,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-emotion": {
+      "x": 125.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-metronome": {
+      "x": 239,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-settings": {
+      "x": 352.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "asset-status": {
+      "x": 14,
+      "y": 116,
+      "width": 442,
+      "height": 16
+    },
+    "mode-study": {
+      "x": 29.5,
+      "y": 184,
+      "width": 200.5,
+      "height": 38.75
+    },
+    "mode-chill": {
+      "x": 240,
+      "y": 184,
+      "width": 200.5,
+      "height": 38.75
+    },
+    "timer-mode": {
+      "x": 320,
+      "y": 244.25,
+      "width": 136,
+      "height": 38.5
+    },
+    "input-study-minutes": {
+      "x": 99.5,
+      "y": 304.25,
+      "width": 56,
+      "height": 27.5
+    },
+    "timer-display": {
+      "x": 42.5,
+      "y": 350.75,
+      "width": 71.9765625,
+      "height": 32
+    },
+    "btn-timer-play": {
+      "x": 339.5,
+      "y": 350.75,
+      "width": 40,
+      "height": 32
+    },
+    "btn-timer-pause": {
+      "x": 387.5,
+      "y": 350.75,
+      "width": 40,
+      "height": 32
+    },
+    "btn-toggle-event-switches": {
+      "x": 29.5,
+      "y": 422.75,
+      "width": 411,
+      "height": 18
+    },
+    "btn-toggle-todo": {
+      "x": 340.4921875,
+      "y": 462.25,
+      "width": 115.5078125,
+      "height": 34
+    }
+  },
+  "emotion": {
+    "btn-reload-assets": {
+      "x": 332,
+      "y": 12,
+      "width": 71,
+      "height": 33
+    },
+    "btn-close-console": {
+      "x": 411,
+      "y": 12,
+      "width": 47,
+      "height": 33
+    },
+    "tab-status": {
+      "x": 12,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-emotion": {
+      "x": 125.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-metronome": {
+      "x": 239,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-settings": {
+      "x": 352.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "asset-status": {
+      "x": 14,
+      "y": 116,
+      "width": 442,
+      "height": 16
+    },
+    "emotion-neutral": {
+      "x": 29.5,
+      "y": 223.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "emotion-happy": {
+      "x": 239,
+      "y": 223.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "emotion-sad": {
+      "x": 29.5,
+      "y": 264.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "emotion-think": {
+      "x": 29.5,
+      "y": 337.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "emotion-doze": {
+      "x": 239,
+      "y": 337.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "emotion-shock": {
+      "x": 29.5,
+      "y": 378.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "emotion-love": {
+      "x": 239,
+      "y": 378.5,
+      "width": 201.5,
+      "height": 33
+    },
+    "random-enabled": {
+      "x": 29.5,
+      "y": 502,
+      "width": 13,
+      "height": 13
+    },
+    "random-interval": {
+      "x": 93.5,
+      "y": 530.5,
+      "width": 96,
+      "height": 30
+    }
+  },
+  "metronome": {
+    "btn-reload-assets": {
+      "x": 332,
+      "y": 12,
+      "width": 71,
+      "height": 33
+    },
+    "btn-close-console": {
+      "x": 411,
+      "y": 12,
+      "width": 47,
+      "height": 33
+    },
+    "tab-status": {
+      "x": 12,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-emotion": {
+      "x": 125.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-metronome": {
+      "x": 239,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-settings": {
+      "x": 352.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "asset-status": {
+      "x": 14,
+      "y": 116,
+      "width": 436,
+      "height": 16
+    },
+    "music-status": {
+      "x": 29.5,
+      "y": 159.5,
+      "width": 405,
+      "height": 20
+    },
+    "bpm-value": {
+      "x": 71.5,
+      "y": 188,
+      "width": 12.2265625,
+      "height": 18.5
+    },
+    "lock-badge": {
+      "x": 29.5,
+      "y": 215.5,
+      "width": 405,
+      "height": 20
+    },
+    "beat-count": {
+      "x": 29.5,
+      "y": 244,
+      "width": 72.5078125,
+      "height": 18.5
+    },
+    "output-device": {
+      "x": 29.5,
+      "y": 360.5,
+      "width": 405,
+      "height": 38.5
+    },
+    "btn-system": {
+      "x": 29.5,
+      "y": 499.140625,
+      "width": 119,
+      "height": 32.140625
+    },
+    "btn-stop": {
+      "x": 156.5,
+      "y": 499.140625,
+      "width": 47,
+      "height": 32.140625
+    },
+    "chk-auto-check-bpm": {
+      "x": 29.5,
+      "y": 577.78125,
+      "width": 13,
+      "height": 13
+    },
+    "chk-auto-follow": {
+      "x": 29.5,
+      "y": 605.78125,
+      "width": 13,
+      "height": 13
+    },
+    "hint-press-q": {
+      "x": 29.5,
+      "y": 630.28125,
+      "width": 405,
+      "height": 16
+    },
+    "slider-sensitivity": {
+      "x": 79.5,
+      "y": 723.28125,
+      "width": 129,
+      "height": 16
+    }
+  },
+  "settings": {
+    "btn-reload-assets": {
+      "x": 332,
+      "y": 12,
+      "width": 71,
+      "height": 33
+    },
+    "btn-close-console": {
+      "x": 411,
+      "y": 12,
+      "width": 47,
+      "height": 33
+    },
+    "tab-status": {
+      "x": 12,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-emotion": {
+      "x": 125.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-metronome": {
+      "x": 239,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "tab-settings": {
+      "x": 352.5,
+      "y": 71,
+      "width": 105.5,
+      "height": 33
+    },
+    "asset-status": {
+      "x": 14,
+      "y": 116,
+      "width": 442,
+      "height": 16
+    },
+    "setting-end-sound": {
+      "x": 31.5,
+      "y": 165,
+      "width": 13,
+      "height": 13
+    },
+    "btn-settings-lock": {
+      "x": 31.5,
+      "y": 252.5,
+      "width": 155,
+      "height": 32.140625
+    }
+  }
+}

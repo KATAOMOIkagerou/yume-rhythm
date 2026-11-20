@@ -1,0 +1,86 @@
+{
+  "passed": true,
+  "executable": "C:\\Users\\zhoum\\AppData\\Local\\Temp\\desktop-pet-rust-EreSA9\\桌宠节奏师.exe",
+  "checks": [
+    "独立双窗口尺寸",
+    "透明背景",
+    "锁定与原生点击穿透",
+    "表情叠加与恢复",
+    "画手扩展整体动画与配件",
+    "正计时暂停续计",
+    "控制台隐藏后续计",
+    "倒计时提示音与静音",
+    "待办保存",
+    "真实 WASAPI 回环",
+    "连接期间停止并取消迟到的响应",
+    "120 BPM 检测",
+    "原生音频切换拖入文件并释放捕获",
+    "随机表情恢复",
+    "四页无横向溢出"
+  ],
+  "alignedControls": 59,
+  "beats": "已跟随 1 拍",
+  "bpm": "120",
+  "frameChanges": 50,
+  "geometry": {
+    "native": {
+      "audioActive": false,
+      "clickThrough": false,
+      "consoleSize": [
+        940,
+        1560
+      ],
+      "consoleVisible": true,
+      "generation": 0,
+      "locked": false,
+      "petSize": [
+        1080,
+        1180
+      ],
+      "scale": 2
+    },
+    "tabs": {
+      "status": {
+        "width": 470,
+        "height": 780,
+        "content": {
+          "x": 0,
+          "y": 116,
+          "width": 470,
+          "height": 608
+        }
+      },
+      "emotion": {
+        "width": 470,
+        "height": 780,
+        "content": {
+          "x": 0,
+          "y": 116,
+          "width": 470,
+          "height": 608
+        }
+      },
+      "metronome": {
+        "width": 470,
+        "height": 780,
+        "content": {
+          "x": 0,
+          "y": 116,
+          "width": 470,
+          "height": 608
+        }
+      },
+      "settings": {
+        "width": 470,
+        "height": 780,
+        "content": {
+          "x": 0,
+          "y": 116,
+          "width": 470,
+          "height": 608
+        }
+      }
+    }
+  },
+  "scratch": "D:\\coding\\pet\\yume-rhythm\\rust-desktop\\.tmp\\desktop-1795171533458"
+}

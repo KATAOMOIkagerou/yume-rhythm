@@ -1,0 +1,20 @@
+{
+  "testedAt": "2026-11-20",
+  "platform": "Windows x64",
+  "rust": "1.100.0",
+  "webview2": "157.0.4341.60",
+  "scale": 2,
+  "controls": 59,
+  "maxDelta": 0,
+  "exeBytes": 2390016,
+  "exeSha256": "b5f3243488d41809662e92c91f05aae7daa6a2a12a65f3ad323d8fe2b857ea65",
+  "transparencyFix": true,
+  "visibleWindowClipping": false,
+  "desktopComposition": {
+    "backgrounds": 2,
+    "lockStates": 2,
+    "edgeSamples": 393,
+    "maxChannelError": 10
+  },
+  "sourceReport": "verification/transparency-report.json"
+}

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+native/target/
+.tools/
+.tmp/
+bin/
+release/
+*.log
+verification/performance-*/profile/
+verification/isolation-*/profile/
+verification/normal-*/profile/
+verification/isolation-*/stop
+verification/normal-*/stop
+verification/performance-*/stop-sampling
+verification/performance-*/status.txt
