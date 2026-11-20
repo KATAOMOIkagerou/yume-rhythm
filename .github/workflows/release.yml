@@ -1,0 +1,100 @@
+name: Release
+
+# 推送 vX.Y.Z 标签时检查、打包并发布到 GitHub Releases。
+# 手动运行（workflow_dispatch）只打包并上传构件，不发布，用来试打包。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装工具链（版本见 rust-toolchain.toml）
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: 核对版本号
+        id: version
+        shell: pwsh
+        run: |
+          $meta = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+          $version = ($meta.packages | Where-Object name -eq 'yume-app').version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "标签 $env:GITHUB_REF_NAME 与 Cargo.toml 的版本 $version 不一致"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: cargo xtask check
+        run: cargo xtask check
+
+      - name: 编译
+        run: cargo build --release --locked -p yume-app
+
+      - name: 打包
+        id: package
+        shell: pwsh
+        run: |
+          $name = "yume-rhythm-${{ steps.version.outputs.version }}-windows-x64"
+          $dir = "dist/$name"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item target/release/yume-rhythm.exe $dir/
+          Copy-Item -Recurse characters $dir/characters
+          Copy-Item LICENSE $dir/
+          Compress-Archive -Path $dir -DestinationPath "dist/$name.zip"
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
+          "name=$name" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+
+      - name: 发布
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 发布说明 = CHANGELOG.md 里本版本那一节 + 使用说明。
+          $version = "${{ steps.version.outputs.version }}"
+          $lines = @(Get-Content CHANGELOG.md -Encoding UTF8)
+          $start = -1
+          $end = $lines.Length
+          for ($i = 0; $i -lt $lines.Length; $i++) {
+            if ($start -lt 0) {
+              if ($lines[$i] -match "^## $([regex]::Escape($version))(\s|$)") { $start = $i }
+            } elseif ($lines[$i] -match '^## ') {
+              $end = $i
+              break
+            }
+          }
+          if ($start -lt 0) { throw "CHANGELOG.md 里没有 $version 的小节" }
+          $notes = @($lines[($start + 1)..($end - 1)]) + @(
+            '',
+            '## 使用',
+            '',
+            '下载 zip，解压后运行 `yume-rhythm.exe`。需要 64 位 Windows 10 或 11。',
+            '',
+            '程序没有代码签名，第一次运行如果出现 SmartScreen 提示，点「更多信息」→「仍要运行」。'
+          )
+          $notes -join "`n" | Out-File -Encoding utf8NoBOM dist/notes.md
+          gh release create $env:GITHUB_REF_NAME `
+            "dist/${{ steps.package.outputs.name }}.zip" `
+            "dist/${{ steps.package.outputs.name }}.zip.sha256" `
+            --title "桌宠节奏师 $env:GITHUB_REF_NAME" `
+            --notes-file dist/notes.md

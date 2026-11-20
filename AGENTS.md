@@ -34,3 +34,14 @@ cargo test -p yume-core        # 只测业务逻辑
 UPDATE_SNAPSHOTS=1 cargo test -p yume-character   # 有意修改画面后更新基准图
 cargo run -p yume-app --release                   # 运行（仅 Windows）
 ```
+
+## CI 与发布
+
+- 推送到 `main` 和每个 PR 都会在 Linux 和 Windows 上跑 `cargo xtask check`（`.github/workflows/ci.yml`）。
+- 发布新版本：
+  1. 改根目录 `Cargo.toml` 的 `workspace.package.version`；
+  2. 在 `CHANGELOG.md` 顶部加 `## X.Y.Z - 日期` 一节；
+  3. 提交并推送，CI 通过后打标签并推送：`git tag vX.Y.Z && git push origin vX.Y.Z`。
+- 标签会触发 `.github/workflows/release.yml`：核对标签与版本号一致，跑检查，编译，
+  打包成 `yume-rhythm-X.Y.Z-windows-x64.zip`（程序、`characters/`、`LICENSE`），
+  以 CHANGELOG 对应小节为说明发布到 GitHub Releases。

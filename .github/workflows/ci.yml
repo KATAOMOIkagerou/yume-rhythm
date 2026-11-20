@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  check:
+    name: xtask check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux：本机测试 + Windows 目标的 clippy 类型检查；Windows：完整 clippy 与全部测试。
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Slint 的系统依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig-dev libxkbcommon-dev
+
+      - name: 安装工具链（版本见 rust-toolchain.toml）
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo xtask check
+        run: cargo xtask check
