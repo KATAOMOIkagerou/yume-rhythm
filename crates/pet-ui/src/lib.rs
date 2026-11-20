@@ -453,6 +453,13 @@ mod tests {
         assert!(info.path.is_some());
         assert!(info.byte_len > 100_000, "font bytes should be non-trivial");
         assert!(defs.font_data.contains_key(CHINESE_FONT_NAME));
+        assert!(
+            matches!(
+                defs.font_data[CHINESE_FONT_NAME].font,
+                std::borrow::Cow::Borrowed(_)
+            ),
+            "Chinese font must be zero-copy memory-mapped (Cow::Borrowed) to avoid private heap bloat"
+        );
         assert_eq!(
             defs.families
                 .get(&egui::FontFamily::Proportional)

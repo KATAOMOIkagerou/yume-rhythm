@@ -135,12 +135,21 @@ mod win32_impl {
             }
         }
 
-        fn copy_bgra(&mut self, src_bgra: &[u8]) {
-            let expected = (self.width as usize) * (self.height as usize) * 4;
-            if src_bgra.len() == expected && !self.bits.is_null() {
-                unsafe {
-                    std::ptr::copy_nonoverlapping(src_bgra.as_ptr(), self.bits, expected);
-                }
+        fn as_slice(&self) -> &[u8] {
+            let len = (self.width as usize) * (self.height as usize) * 4;
+            if self.bits.is_null() {
+                &[]
+            } else {
+                unsafe { std::slice::from_raw_parts(self.bits, len) }
+            }
+        }
+
+        fn as_mut_slice(&mut self) -> &mut [u8] {
+            let len = (self.width as usize) * (self.height as usize) * 4;
+            if self.bits.is_null() {
+                &mut []
+            } else {
+                unsafe { std::slice::from_raw_parts_mut(self.bits, len) }
             }
         }
     }
@@ -296,7 +305,13 @@ mod win32_impl {
                 );
 
                 let compositor = PetCompositor::new(width as u32, height as u32);
-                let surface = LayeredSurface::new(width as u32, height as u32)?;
+                let surface = match LayeredSurface::new(width as u32, height as u32) {
+                    Ok(s) => s,
+                    Err(err) => {
+                        DestroyWindow(hwnd);
+                        return Err(err);
+                    }
+                };
 
                 let inner = Box::new(RefCell::new(WindowInner {
                     x,
@@ -397,8 +412,7 @@ mod win32_impl {
         }
 
         pub fn last_frame_bgra(&self) -> (&[u8], u32, u32) {
-            let (w, h) = self.compositor.dimensions();
-            (self.compositor.bgra_buffer(), w, h)
+            (self.surface.as_slice(), self.surface.width, self.surface.height)
         }
 
         pub fn set_position(&mut self, x: i32, y: i32) {
@@ -468,8 +482,8 @@ mod win32_impl {
             }
 
             self.compositor.set_toolbar_state(toolbar_state);
-            let bgra = self.compositor.render_frame(input);
-            self.surface.copy_bgra(bgra);
+            self.compositor
+                .render_frame_into(input, self.surface.as_mut_slice());
 
             unsafe {
                 let pt_dst = POINT { x, y };

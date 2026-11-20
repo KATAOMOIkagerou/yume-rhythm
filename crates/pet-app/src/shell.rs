@@ -237,7 +237,7 @@ impl ShellIntegration {
                 continue;
             }
             if self.hotkey_console_id == Some(event.id) {
-                actions.push(AppAction::ShowConsole);
+                actions.push(AppAction::ToggleConsole);
             } else if self.hotkey_lock_id == Some(event.id) {
                 actions.push(AppAction::ToggleLock);
             }

@@ -229,7 +229,8 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
     let first_sample = ProcessSample::capture(start_ms);
     let mut prev_sample = first_sample;
     let mut samples = Vec::new();
-    let mut frame_times_ms = Vec::new();
+    let mut render_times_ms = Vec::new();
+    let mut present_times_ms = Vec::new();
     let mut cpu_peak_pct = 0.0f64;
     let mut private_peak_mib = first_sample.private_mib();
 
@@ -273,7 +274,8 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
             };
             let t0 = Instant::now();
             pet.present(&input)?;
-            frame_times_ms.push(t0.elapsed().as_secs_f64() * 1000.0);
+            present_times_ms.push(t0.elapsed().as_secs_f64() * 1000.0);
+            render_times_ms.push(pet.last_render_ms());
             next_frame_ms = (next_frame_ms + frame_step_ms).max(now_ms + 1.0);
         }
 
@@ -324,7 +326,10 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
     } else {
         samples.iter().map(|s| s.private_mib()).sum::<f64>() / samples.len() as f64
     };
-    let (avg_ms, p50_ms, p95_ms, max_ms) = summarize_ms(&mut frame_times_ms);
+    let (render_avg_ms, render_p50_ms, render_p95_ms, render_max_ms) =
+        summarize_ms(&mut render_times_ms);
+    let (present_avg_ms, present_p50_ms, present_p95_ms, present_max_ms) =
+        summarize_ms(&mut present_times_ms);
 
     if let Some(console_path) = &derived_console_path {
         let scale = pet.window_rect().scale_factor.clamp(1.0, 2.0);
@@ -335,7 +340,7 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
             sprite_count: assets.sprites.len(),
             asset_decoded_bytes: assets.total_decoded_bytes,
             asset_full_canvas_bytes: assets.full_canvas_equivalent_bytes,
-            pet_frame_ms: avg_ms as f32,
+            pet_frame_ms: render_avg_ms as f32,
             ui_frame_ms: 0.0,
             private_memory_mib: final_sample.private_mib() as f32,
             loaded_font_name: headless.metrics.loaded_font_name.clone(),
@@ -355,12 +360,24 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
     let report = serde_json::json!({
         "durationSecs": round2((final_sample.timestamp_ms - first_sample.timestamp_ms) / 1000.0),
         "withConsole": opts.with_console,
-        "framesRendered": frame_times_ms.len(),
+        "framesRendered": present_times_ms.len(),
+        "renderMs": {
+            "avg": round3(render_avg_ms),
+            "p50": round3(render_p50_ms),
+            "p95": round3(render_p95_ms),
+            "max": round3(render_max_ms),
+        },
+        "presentMs": {
+            "avg": round3(present_avg_ms),
+            "p50": round3(present_p50_ms),
+            "p95": round3(present_p95_ms),
+            "max": round3(present_max_ms),
+        },
         "frameMs": {
-            "avg": round3(avg_ms),
-            "p50": round3(p50_ms),
-            "p95": round3(p95_ms),
-            "max": round3(max_ms),
+            "avg": round3(present_avg_ms),
+            "p50": round3(present_p50_ms),
+            "p95": round3(present_p95_ms),
+            "max": round3(present_max_ms),
         },
         "cpu": {
             "avgPct": round2(cpu_avg_pct),

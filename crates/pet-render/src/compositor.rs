@@ -183,6 +183,11 @@ impl CroppedBgra {
 
     /// Ultra-fast 1:1 premultiplied BGRA SourceOver blit using per-row active spans.
     fn blit_identity(&self, dst: &mut [u8], dst_w: u32, dst_h: u32) {
+        self.blit_offset(dst, dst_w, dst_h, 0, 0);
+    }
+
+    /// Ultra-fast direct copy for the bottom-most layer when the destination framebuffer is empty.
+    fn blit_copy_over_empty(&self, dst: &mut [u8], dst_w: u32, dst_h: u32) {
         let dw = dst_w as i32;
         let dh = dst_h as i32;
         let sw = self.width as usize;
@@ -205,13 +210,8 @@ impl CroppedBgra {
             let count = (x_end - x_start) as usize;
             let src_row_off = (ry * sw + src_rx_start) * 4;
             let dst_row_off = ((dy as usize) * (dst_w as usize) + (x_start as usize)) * 4;
-
-            let src_slice = &self.bgra[src_row_off..src_row_off + count * 4];
-            let dst_slice = &mut dst[dst_row_off..dst_row_off + count * 4];
-
-            for (s, d) in src_slice.chunks_exact(4).zip(dst_slice.chunks_exact_mut(4)) {
-                blend_premul_bgra_over(d, s[0], s[1], s[2], s[3]);
-            }
+            dst[dst_row_off..dst_row_off + count * 4]
+                .copy_from_slice(&self.bgra[src_row_off..src_row_off + count * 4]);
         }
     }
 
@@ -223,17 +223,22 @@ impl CroppedBgra {
         dst_h: u32,
         extra_transform: Transform,
     ) {
-        // Fast path: pure integer or near-integer translation with no scale/rotation
+        // Fast path: pure translation (no scale/rotation — common during idle breathing & sway!)
         if (extra_transform.sx - 1.0).abs() < 1e-4
             && (extra_transform.sy - 1.0).abs() < 1e-4
             && extra_transform.kx.abs() < 1e-4
             && extra_transform.ky.abs() < 1e-4
-            && (extra_transform.tx - extra_transform.tx.round()).abs() < 0.02
-            && (extra_transform.ty - extra_transform.ty.round()).abs() < 0.02
         {
-            let shift_x = extra_transform.tx.round() as i32;
-            let shift_y = extra_transform.ty.round() as i32;
-            self.blit_offset(dst, dst_w, dst_h, shift_x, shift_y);
+            if (extra_transform.tx - extra_transform.tx.round()).abs() < 0.02
+                && (extra_transform.ty - extra_transform.ty.round()).abs() < 0.02
+            {
+                let shift_x = extra_transform.tx.round() as i32;
+                let shift_y = extra_transform.ty.round() as i32;
+                self.blit_offset(dst, dst_w, dst_h, shift_x, shift_y);
+                return;
+            }
+            // Fractional pure translation with constant weights across the entire sprite
+            self.blit_fractional_translate(dst, dst_w, dst_h, extra_transform.tx, extra_transform.ty);
             return;
         }
 
@@ -248,6 +253,322 @@ impl CroppedBgra {
             self.height,
             fwd,
         );
+    }
+
+    /// Fast constant-weight bilinear blit for pure sub-pixel translation (`sx=sy=1, rot=0`).
+    /// Especially fast for vertical-only breathing (`tx == 0`, 2-tap vertical linear blend!).
+    fn blit_fractional_translate(
+        &self,
+        dst: &mut [u8],
+        dst_w: u32,
+        dst_h: u32,
+        tx: f32,
+        ty: f32,
+    ) {
+        let base_x = tx.floor() as i32;
+        let base_y = ty.floor() as i32;
+        // Source sample for destination pixel `(dx, dy)` is `(dx - tx, dy - ty)`.
+        // Let `frac_x = tx - base_x` in `[0, 1)`: destination pixel `base_x + x` mixes
+        // `src[x]` with weight `(1 - frac_x)` and `src[x - 1]` with weight `frac_x`.
+        let fx = ((tx - base_x as f32) * 256.0).round().clamp(0.0, 256.0) as u32;
+        let fy = ((ty - base_y as f32) * 256.0).round().clamp(0.0, 256.0) as u32;
+        if fx == 0 && fy == 0 {
+            self.blit_offset(dst, dst_w, dst_h, base_x, base_y);
+            return;
+        }
+
+        let dw = dst_w as i32;
+        let dh = dst_h as i32;
+        let sw = self.width as i32;
+        let sh = self.height as i32;
+        let sw_u = self.width as usize;
+        let dst_row_bytes = (dst_w as usize) * 4;
+        let ox = self.x + base_x;
+        let oy = self.y + base_y;
+
+        if fx == 0 {
+            // 2-tap vertical-only blend (e.g. head breathing with head_x == 0!)
+            let w_cur = 256 - fy;
+            let w_prev = fy;
+            for sy in 0..=sh {
+                let dy = oy + sy;
+                if dy < 0 || dy >= dh {
+                    continue;
+                }
+                let has_cur = sy < sh;
+                let has_prev = sy > 0;
+                let (s0, s1) = match (has_cur, has_prev) {
+                    (true, true) => {
+                        let a = self.row_spans[sy as usize];
+                        let b = self.row_spans[(sy - 1) as usize];
+                        if a.0 >= a.1 && b.0 >= b.1 {
+                            continue;
+                        }
+                        if a.0 >= a.1 {
+                            b
+                        } else if b.0 >= b.1 {
+                            a
+                        } else {
+                            (a.0.min(b.0), a.1.max(b.1))
+                        }
+                    }
+                    (true, false) => self.row_spans[sy as usize],
+                    (false, true) => self.row_spans[(sy - 1) as usize],
+                    (false, false) => continue,
+                };
+                if s0 >= s1 {
+                    continue;
+                }
+                let x_start = (ox + s0 as i32).max(0);
+                let x_end = (ox + s1 as i32).min(dw);
+                if x_start >= x_end {
+                    continue;
+                }
+                let dst_row = &mut dst[(dy as usize) * dst_row_bytes..];
+
+                if has_cur && has_prev {
+                    let row_cur = &self.bgra[(sy as usize) * sw_u * 4..];
+                    let row_prev = &self.bgra[((sy - 1) as usize) * sw_u * 4..];
+                    for dx in x_start..x_end {
+                        let rx = (dx - ox) as usize;
+                        let off = rx * 4;
+                        let ac = row_cur[off + 3];
+                        let ap = row_prev[off + 3];
+                        if (ac | ap) == 0 {
+                            continue;
+                        }
+                        let doff = (dx as usize) * 4;
+                        if (ac & ap) == 255 {
+                            dst_row[doff] = ((row_cur[off] as u32 * w_cur
+                                + row_prev[off] as u32 * w_prev
+                                + 128)
+                                >> 8) as u8;
+                            dst_row[doff + 1] = ((row_cur[off + 1] as u32 * w_cur
+                                + row_prev[off + 1] as u32 * w_prev
+                                + 128)
+                                >> 8) as u8;
+                            dst_row[doff + 2] = ((row_cur[off + 2] as u32 * w_cur
+                                + row_prev[off + 2] as u32 * w_prev
+                                + 128)
+                                >> 8) as u8;
+                            dst_row[doff + 3] = 255;
+                        } else {
+                            let sa = ((ac as u32 * w_cur + ap as u32 * w_prev + 128) >> 8) as u8;
+                            if sa != 0 {
+                                let sb = ((row_cur[off] as u32 * w_cur
+                                    + row_prev[off] as u32 * w_prev
+                                    + 128)
+                                    >> 8)
+                                    .min(sa as u32) as u8;
+                                let sg = ((row_cur[off + 1] as u32 * w_cur
+                                    + row_prev[off + 1] as u32 * w_prev
+                                    + 128)
+                                    >> 8)
+                                    .min(sa as u32) as u8;
+                                let sr = ((row_cur[off + 2] as u32 * w_cur
+                                    + row_prev[off + 2] as u32 * w_prev
+                                    + 128)
+                                    >> 8)
+                                    .min(sa as u32) as u8;
+                                blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                            }
+                        }
+                    }
+                } else {
+                    let (row_src, weight) = if has_cur {
+                        (&self.bgra[(sy as usize) * sw_u * 4..], w_cur)
+                    } else {
+                        (&self.bgra[((sy - 1) as usize) * sw_u * 4..], w_prev)
+                    };
+                    for dx in x_start..x_end {
+                        let off = ((dx - ox) as usize) * 4;
+                        let a = row_src[off + 3];
+                        if a == 0 {
+                            continue;
+                        }
+                        let sa = ((a as u32 * weight + 128) >> 8) as u8;
+                        if sa != 0 {
+                            let sb = ((row_src[off] as u32 * weight + 128) >> 8).min(sa as u32) as u8;
+                            let sg = ((row_src[off + 1] as u32 * weight + 128) >> 8).min(sa as u32) as u8;
+                            let sr = ((row_src[off + 2] as u32 * weight + 128) >> 8).min(sa as u32) as u8;
+                            let doff = (dx as usize) * 4;
+                            blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // General 4-tap constant-weight sub-pixel translation
+        let ifx = 256 - fx;
+        let ify = 256 - fy;
+        let w00 = ifx * ify; // (rx, ry)
+        let w10 = fx * ify;  // (rx - 1, ry)
+        let w01 = ifx * fy;  // (rx, ry - 1)
+        let w11 = fx * fy;   // (rx - 1, ry - 1)
+
+        for sy in 0..=sh {
+            let dy = oy + sy;
+            if dy < 0 || dy >= dh {
+                continue;
+            }
+            let has_cur = sy < sh;
+            let has_prev = sy > 0;
+            let (s0, s1) = match (has_cur, has_prev) {
+                (true, true) => {
+                    let a = self.row_spans[sy as usize];
+                    let b = self.row_spans[(sy - 1) as usize];
+                    if a.0 >= a.1 && b.0 >= b.1 {
+                        continue;
+                    }
+                    if a.0 >= a.1 {
+                        b
+                    } else if b.0 >= b.1 {
+                        a
+                    } else {
+                        (a.0.min(b.0), a.1.max(b.1))
+                    }
+                }
+                (true, false) => self.row_spans[sy as usize],
+                (false, true) => self.row_spans[(sy - 1) as usize],
+                (false, false) => continue,
+            };
+            if s0 >= s1 {
+                continue;
+            }
+            // Shift right edge by +1 because `rx - 1` reaches `s1`
+            let x_start = (ox + s0 as i32).max(0);
+            let x_end = (ox + s1 as i32 + 1).min(dw);
+            if x_start >= x_end {
+                continue;
+            }
+            let dst_row = &mut dst[(dy as usize) * dst_row_bytes..];
+
+            if has_cur && has_prev {
+                let row_cur = &self.bgra[(sy as usize) * sw_u * 4..];
+                let row_prev = &self.bgra[((sy - 1) as usize) * sw_u * 4..];
+                for dx in x_start..x_end {
+                    let rx = dx - ox;
+                    if rx > 0 && rx < sw {
+                        let o0 = (rx as usize) * 4;
+                        let o1 = o0 - 4;
+                        let a00 = row_cur[o0 + 3];
+                        let a10 = row_cur[o1 + 3];
+                        let a01 = row_prev[o0 + 3];
+                        let a11 = row_prev[o1 + 3];
+                        if (a00 | a10 | a01 | a11) == 0 {
+                            continue;
+                        }
+                        let doff = (dx as usize) * 4;
+                        if (a00 & a10 & a01 & a11) == 255 {
+                            dst_row[doff] = ((row_cur[o0] as u32 * w00
+                                + row_cur[o1] as u32 * w10
+                                + row_prev[o0] as u32 * w01
+                                + row_prev[o1] as u32 * w11
+                                + 32768)
+                                >> 16) as u8;
+                            dst_row[doff + 1] = ((row_cur[o0 + 1] as u32 * w00
+                                + row_cur[o1 + 1] as u32 * w10
+                                + row_prev[o0 + 1] as u32 * w01
+                                + row_prev[o1 + 1] as u32 * w11
+                                + 32768)
+                                >> 16) as u8;
+                            dst_row[doff + 2] = ((row_cur[o0 + 2] as u32 * w00
+                                + row_cur[o1 + 2] as u32 * w10
+                                + row_prev[o0 + 2] as u32 * w01
+                                + row_prev[o1 + 2] as u32 * w11
+                                + 32768)
+                                >> 16) as u8;
+                            dst_row[doff + 3] = 255;
+                        } else {
+                            let sa = ((a00 as u32 * w00
+                                + a10 as u32 * w10
+                                + a01 as u32 * w01
+                                + a11 as u32 * w11
+                                + 32768)
+                                >> 16) as u8;
+                            if sa != 0 {
+                                let sb = ((row_cur[o0] as u32 * w00
+                                    + row_cur[o1] as u32 * w10
+                                    + row_prev[o0] as u32 * w01
+                                    + row_prev[o1] as u32 * w11
+                                    + 32768)
+                                    >> 16)
+                                    .min(sa as u32) as u8;
+                                let sg = ((row_cur[o0 + 1] as u32 * w00
+                                    + row_cur[o1 + 1] as u32 * w10
+                                    + row_prev[o0 + 1] as u32 * w01
+                                    + row_prev[o1 + 1] as u32 * w11
+                                    + 32768)
+                                    >> 16)
+                                    .min(sa as u32) as u8;
+                                let sr = ((row_cur[o0 + 2] as u32 * w00
+                                    + row_cur[o1 + 2] as u32 * w10
+                                    + row_prev[o0 + 2] as u32 * w01
+                                    + row_prev[o1 + 2] as u32 * w11
+                                    + 32768)
+                                    >> 16)
+                                    .min(sa as u32) as u8;
+                                blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                            }
+                        }
+                    } else {
+                        let s = |cx: i32, row: &[u8]| -> [u32; 4] {
+                            if cx >= 0 && cx < sw {
+                                let o = (cx as usize) * 4;
+                                [row[o] as u32, row[o + 1] as u32, row[o + 2] as u32, row[o + 3] as u32]
+                            } else {
+                                [0, 0, 0, 0]
+                            }
+                        };
+                        let p00 = s(rx, row_cur);
+                        let p10 = s(rx - 1, row_cur);
+                        let p01 = s(rx, row_prev);
+                        let p11 = s(rx - 1, row_prev);
+                        if (p00[3] | p10[3] | p01[3] | p11[3]) != 0 {
+                            let sa = ((p00[3] * w00 + p10[3] * w10 + p01[3] * w01 + p11[3] * w11 + 32768) >> 16) as u8;
+                            if sa != 0 {
+                                let sb = ((p00[0] * w00 + p10[0] * w10 + p01[0] * w01 + p11[0] * w11 + 32768) >> 16).min(sa as u32) as u8;
+                                let sg = ((p00[1] * w00 + p10[1] * w10 + p01[1] * w01 + p11[1] * w11 + 32768) >> 16).min(sa as u32) as u8;
+                                let sr = ((p00[2] * w00 + p10[2] * w10 + p01[2] * w01 + p11[2] * w11 + 32768) >> 16).min(sa as u32) as u8;
+                                let doff = (dx as usize) * 4;
+                                blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                            }
+                        }
+                    }
+                }
+            } else {
+                let (row_src, w0, w1) = if has_cur {
+                    (&self.bgra[(sy as usize) * sw_u * 4..], w00, w10)
+                } else {
+                    (&self.bgra[((sy - 1) as usize) * sw_u * 4..], w01, w11)
+                };
+                for dx in x_start..x_end {
+                    let rx = dx - ox;
+                    let s = |cx: i32| -> [u32; 4] {
+                        if cx >= 0 && cx < sw {
+                            let o = (cx as usize) * 4;
+                            [row_src[o] as u32, row_src[o + 1] as u32, row_src[o + 2] as u32, row_src[o + 3] as u32]
+                        } else {
+                            [0, 0, 0, 0]
+                        }
+                    };
+                    let p0 = s(rx);
+                    let p1 = s(rx - 1);
+                    if (p0[3] | p1[3]) != 0 {
+                        let sa = ((p0[3] * w0 + p1[3] * w1 + 32768) >> 16) as u8;
+                        if sa != 0 {
+                            let sb = ((p0[0] * w0 + p1[0] * w1 + 32768) >> 16).min(sa as u32) as u8;
+                            let sg = ((p0[1] * w0 + p1[1] * w1 + 32768) >> 16).min(sa as u32) as u8;
+                            let sr = ((p0[2] * w0 + p1[2] * w1 + 32768) >> 16).min(sa as u32) as u8;
+                            let doff = (dx as usize) * 4;
+                            blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn blit_offset(&self, dst: &mut [u8], dst_w: u32, dst_h: u32, dx_off: i32, dy_off: i32) {
@@ -381,37 +702,60 @@ fn blit_bgra_affine_bilinear(
                     let w01 = ifx * fy;
                     let w11 = fx * fy;
 
-                    let sa = ((a00 as u32 * w00
-                        + a10 as u32 * w10
-                        + a01 as u32 * w01
-                        + a11 as u32 * w11
-                        + 32768)
-                        >> 16) as u8;
-                    if sa != 0 {
-                        let sb = ((src[base] as u32 * w00
+                    let doff = (dx as usize) * 4;
+                    if (a00 & a10 & a01 & a11) == 255 {
+                        // Opaque interior fast path (~85% of head/body pixels): direct store!
+                        dst_row[doff] = ((src[base] as u32 * w00
                             + src[base + 4] as u32 * w10
                             + src[base1] as u32 * w01
                             + src[base1 + 4] as u32 * w11
                             + 32768)
-                            >> 16)
-                            .min(sa as u32) as u8;
-                        let sg = ((src[base + 1] as u32 * w00
+                            >> 16) as u8;
+                        dst_row[doff + 1] = ((src[base + 1] as u32 * w00
                             + src[base + 5] as u32 * w10
                             + src[base1 + 1] as u32 * w01
                             + src[base1 + 5] as u32 * w11
                             + 32768)
-                            >> 16)
-                            .min(sa as u32) as u8;
-                        let sr = ((src[base + 2] as u32 * w00
+                            >> 16) as u8;
+                        dst_row[doff + 2] = ((src[base + 2] as u32 * w00
                             + src[base + 6] as u32 * w10
                             + src[base1 + 2] as u32 * w01
                             + src[base1 + 6] as u32 * w11
                             + 32768)
-                            >> 16)
-                            .min(sa as u32) as u8;
+                            >> 16) as u8;
+                        dst_row[doff + 3] = 255;
+                    } else {
+                        let sa = ((a00 as u32 * w00
+                            + a10 as u32 * w10
+                            + a01 as u32 * w01
+                            + a11 as u32 * w11
+                            + 32768)
+                            >> 16) as u8;
+                        if sa != 0 {
+                            let sb = ((src[base] as u32 * w00
+                                + src[base + 4] as u32 * w10
+                                + src[base1] as u32 * w01
+                                + src[base1 + 4] as u32 * w11
+                                + 32768)
+                                >> 16)
+                                .min(sa as u32) as u8;
+                            let sg = ((src[base + 1] as u32 * w00
+                                + src[base + 5] as u32 * w10
+                                + src[base1 + 1] as u32 * w01
+                                + src[base1 + 5] as u32 * w11
+                                + 32768)
+                                >> 16)
+                                .min(sa as u32) as u8;
+                            let sr = ((src[base + 2] as u32 * w00
+                                + src[base + 6] as u32 * w10
+                                + src[base1 + 2] as u32 * w01
+                                + src[base1 + 6] as u32 * w11
+                                + 32768)
+                                >> 16)
+                                .min(sa as u32) as u8;
 
-                        let doff = (dx as usize) * 4;
-                        blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                            blend_premul_bgra_over(&mut dst_row[doff..doff + 4], sb, sg, sr, sa);
+                        }
                     }
                 }
             } else if ix >= -1 && ix < sw_i && iy >= -1 && iy < sh_i {
@@ -709,7 +1053,9 @@ impl PetCompositor {
             width,
             height,
             scale_factor,
-            bgra_buffer: vec![0u8; (width as usize) * (height as usize) * 4],
+            // Allocated lazily only when `render_frame()` (internal buffer API) is used.
+            // `PetWindow` uses `render_frame_into()` directly into the Win32 DIBSection (0 MiB duplicate buffer!).
+            bgra_buffer: Vec::new(),
             toolbar_strip,
             note_atlas: NoteGlyphAtlas::new(),
             asset_generation: 0,
@@ -741,8 +1087,10 @@ impl PetCompositor {
             self.width = width;
             self.height = height;
             self.scale_factor = (width as f32) / (PET_LOGICAL_WIDTH as f32);
-            self.bgra_buffer
-                .resize((width as usize) * (height as usize) * 4, 0);
+            if !self.bgra_buffer.is_empty() {
+                self.bgra_buffer
+                    .resize((width as usize) * (height as usize) * 4, 0);
+            }
             let strip_h = ((56.0 * self.scale_factor).ceil() as u32).clamp(1, height);
             self.toolbar_strip =
                 Pixmap::new(width, strip_h).expect("valid toolbar strip dimensions");
@@ -822,9 +1170,27 @@ impl PetCompositor {
         &self.bgra_buffer
     }
 
-    /// Renders a single pet frame directly into the internal premultiplied BGRA8 buffer
+    /// Renders a single pet frame into the internal lazily-allocated premultiplied BGRA8 buffer
     /// ready for Win32 `UpdateLayeredWindow(ULW_ALPHA)`.
     pub fn render_frame(&mut self, input: &PetRenderInput<'_>) -> &[u8] {
+        let required = (self.width as usize) * (self.height as usize) * 4;
+        let mut buf = std::mem::take(&mut self.bgra_buffer);
+        if buf.len() != required {
+            buf.resize(required, 0);
+        }
+        self.render_frame_into(input, &mut buf);
+        self.bgra_buffer = buf;
+        &self.bgra_buffer
+    }
+
+    /// Renders a single pet frame directly into a caller-provided premultiplied BGRA8 buffer
+    /// (such as a Win32 `CreateDIBSection` surface) with zero intermediate framebuffer copy.
+    pub fn render_frame_into(&mut self, input: &PetRenderInput<'_>, dst_bgra: &mut [u8]) {
+        let expected = (self.width as usize) * (self.height as usize) * 4;
+        if dst_bgra.len() < expected {
+            return;
+        }
+        let dst_bgra = &mut dst_bgra[..expected];
         let t0 = Instant::now();
 
         let manifest = &input.assets.manifest;
@@ -837,11 +1203,12 @@ impl PetCompositor {
         let fingerprint = fingerprint_assets(input.assets);
 
         // Clear framebuffer to fully transparent premultiplied black (0, 0, 0, 0).
-        self.bgra_buffer.fill(0);
+        dst_bgra.fill(0);
 
         // 1) Beat pulse ring behind character (analytical antialiased annulus directly in BGRA)
-        if input.pose.ring_opacity > 0.005 {
-            draw_beat_ring_bgra(&mut self.bgra_buffer, self.width, self.height, &geom, input.pose);
+        let has_ring = input.pose.ring_opacity > 0.005;
+        if has_ring {
+            draw_beat_ring_bgra(dst_bgra, self.width, self.height, &geom, input.pose);
         }
 
         // Physical-space head rig transform around manifest headPivot
@@ -864,7 +1231,7 @@ impl PetCompositor {
                     .sprite_to_physical(frame)
                     .post_concat(head_transform_phys);
                 blit_bgra_affine_bilinear(
-                    &mut self.bgra_buffer,
+                    dst_bgra,
                     self.width,
                     self.height,
                     &cropped.bgra,
@@ -887,7 +1254,7 @@ impl PetCompositor {
                 .unwrap_or(true);
             if back_dynamic {
                 draw_dynamic_named_sprite(
-                    &mut self.bgra_buffer,
+                    dst_bgra,
                     self.width,
                     self.height,
                     input.assets,
@@ -901,7 +1268,11 @@ impl PetCompositor {
                 .as_ref()
                 .and_then(|c| c.static_back.as_ref())
             {
-                cp.blit_identity(&mut self.bgra_buffer, self.width, self.height);
+                if has_ring {
+                    cp.blit_identity(dst_bgra, self.width, self.height);
+                } else {
+                    cp.blit_copy_over_empty(dst_bgra, self.width, self.height);
+                }
             }
 
             // 3) Body rig (subtle breathing + soft counter-recoil around 50% 88% of stage)
@@ -921,7 +1292,7 @@ impl PetCompositor {
                 .unwrap_or(true);
             if body_dynamic {
                 draw_dynamic_named_sprite(
-                    &mut self.bgra_buffer,
+                    dst_bgra,
                     self.width,
                     self.height,
                     input.assets,
@@ -935,17 +1306,13 @@ impl PetCompositor {
                 .as_ref()
                 .and_then(|c| c.body_base.as_ref())
             {
-                cp.blit_transformed(
-                    &mut self.bgra_buffer,
-                    self.width,
-                    self.height,
-                    body_transform_phys,
-                );
+                cp.blit_transformed(dst_bgra, self.width, self.height, body_transform_phys);
             }
 
             // 4) Unified Head Rig (hair_back, head_base, blush_base, eyes, mouth, hair_front, optional headphones)
             let show_headphones = input.music_running && manifest.show_music_headphones;
             self.draw_head_rig(
+                dst_bgra,
                 input.assets,
                 &input.layers.eyes,
                 &input.layers.mouth,
@@ -978,19 +1345,20 @@ impl PetCompositor {
                         .as_ref()
                         .and_then(|c| c.static_front_combined.as_ref())
                     {
-                        cp.blit_identity(&mut self.bgra_buffer, self.width, self.height);
+                        cp.blit_identity(dst_bgra, self.width, self.height);
                     }
                 } else {
-                    self.draw_static_front_split(input, computer_file, arms_file, &geom);
+                    self.draw_static_front_split(dst_bgra, input, computer_file, arms_file, &geom);
                 }
             } else {
-                self.draw_static_front_split(input, computer_file, arms_file, &geom);
+                self.draw_static_front_split(dst_bgra, input, computer_file, arms_file, &geom);
             }
         }
 
         // 10) Head-attached accessory FX overlay (with gentle floating animation)
         if let Some(overlay_file) = input.layers.overlay.as_deref() {
             self.draw_overlay(
+                dst_bgra,
                 input.assets,
                 overlay_file,
                 input.elapsed_ms,
@@ -1005,7 +1373,7 @@ impl PetCompositor {
         if !input.pose.notes.is_empty() {
             for note in &input.pose.notes {
                 draw_note_particle_fast(
-                    &mut self.bgra_buffer,
+                    dst_bgra,
                     self.width,
                     self.height,
                     &geom,
@@ -1028,7 +1396,7 @@ impl PetCompositor {
                 &mut self.label_cache,
             );
             blend_rgba_strip_over_bgra(
-                &mut self.bgra_buffer,
+                dst_bgra,
                 self.width,
                 self.toolbar_strip.data(),
                 self.toolbar_strip.width(),
@@ -1037,11 +1405,11 @@ impl PetCompositor {
         }
 
         self.last_render_ms = t0.elapsed().as_secs_f64() * 1000.0;
-        &self.bgra_buffer
     }
 
     fn draw_static_front_split(
         &mut self,
+        dst_bgra: &mut [u8],
         input: &PetRenderInput<'_>,
         computer_file: &str,
         arms_file: &str,
@@ -1057,7 +1425,7 @@ impl PetCompositor {
             .unwrap_or(true);
         if desk_dynamic {
             draw_dynamic_named_sprite(
-                &mut self.bgra_buffer,
+                dst_bgra,
                 self.width,
                 self.height,
                 input.assets,
@@ -1067,7 +1435,7 @@ impl PetCompositor {
                 Transform::identity(),
             );
             draw_dynamic_named_sprite(
-                &mut self.bgra_buffer,
+                dst_bgra,
                 self.width,
                 self.height,
                 input.assets,
@@ -1077,7 +1445,7 @@ impl PetCompositor {
                 Transform::identity(),
             );
             draw_dynamic_named_sprite(
-                &mut self.bgra_buffer,
+                dst_bgra,
                 self.width,
                 self.height,
                 input.assets,
@@ -1091,7 +1459,7 @@ impl PetCompositor {
             .as_ref()
             .and_then(|c| c.static_desk.as_ref())
         {
-            cp.blit_identity(&mut self.bgra_buffer, self.width, self.height);
+            cp.blit_identity(dst_bgra, self.width, self.height);
         }
 
         // Timer clock with gentle pastel pink breathing glow when active
@@ -1111,7 +1479,7 @@ impl PetCompositor {
                     let cy = cp.y as f32 + (cp.height as f32) * 0.5;
                     let r = ((cp.width.max(cp.height) as f32) * 0.68).max(18.0 * geom.dpi_avg());
                     draw_timer_glow_bgra(
-                        &mut self.bgra_buffer,
+                        dst_bgra,
                         self.width,
                         self.height,
                         cx,
@@ -1119,11 +1487,11 @@ impl PetCompositor {
                         r,
                         input.pose.timer_glow_strength,
                     );
-                    cp.blit_identity(&mut self.bgra_buffer, self.width, self.height);
+                    cp.blit_identity(dst_bgra, self.width, self.height);
                 }
             } else {
                 draw_dynamic_named_sprite(
-                    &mut self.bgra_buffer,
+                    dst_bgra,
                     self.width,
                     self.height,
                     input.assets,
@@ -1143,7 +1511,7 @@ impl PetCompositor {
             .unwrap_or(true);
         if arms_dynamic {
             draw_dynamic_named_sprite(
-                &mut self.bgra_buffer,
+                dst_bgra,
                 self.width,
                 self.height,
                 input.assets,
@@ -1157,7 +1525,7 @@ impl PetCompositor {
             .as_ref()
             .and_then(|c| c.static_arms.as_ref())
         {
-            cp.blit_identity(&mut self.bgra_buffer, self.width, self.height);
+            cp.blit_identity(dst_bgra, self.width, self.height);
         }
     }
 
@@ -1278,6 +1646,7 @@ impl PetCompositor {
     #[allow(clippy::too_many_arguments)]
     fn draw_head_rig(
         &mut self,
+        dst_bgra: &mut [u8],
         assets: &LoadedCharacterAssets,
         eyes: &str,
         mouth: &str,
@@ -1310,7 +1679,7 @@ impl PetCompositor {
         if any_animated {
             for name in active_layers {
                 draw_dynamic_named_sprite(
-                    &mut self.bgra_buffer,
+                    dst_bgra,
                     self.width,
                     self.height,
                     assets,
@@ -1355,18 +1724,14 @@ impl PetCompositor {
         }
 
         if let Some(cp) = self.head_cache.as_ref().and_then(|c| c.pixmap.as_ref()) {
-            cp.blit_transformed(
-                &mut self.bgra_buffer,
-                self.width,
-                self.height,
-                head_transform_phys,
-            );
+            cp.blit_transformed(dst_bgra, self.width, self.height, head_transform_phys);
         }
     }
 
     #[allow(clippy::too_many_arguments)]
     fn draw_overlay(
         &mut self,
+        dst_bgra: &mut [u8],
         assets: &LoadedCharacterAssets,
         overlay_file: &str,
         elapsed_ms: u64,
@@ -1424,12 +1789,7 @@ impl PetCompositor {
         }
 
         if let Some(cp) = self.overlay_cache.as_ref().and_then(|c| c.pixmap.as_ref()) {
-            cp.blit_transformed(
-                &mut self.bgra_buffer,
-                self.width,
-                self.height,
-                combined_phys,
-            );
+            cp.blit_transformed(dst_bgra, self.width, self.height, combined_phys);
         }
     }
 }

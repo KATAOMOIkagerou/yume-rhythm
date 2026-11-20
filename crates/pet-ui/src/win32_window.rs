@@ -1,6 +1,7 @@
 use crate::{AnchorRect, CONSOLE_LOGICAL_HEIGHT, CONSOLE_LOGICAL_WIDTH, CONSOLE_MIN_HEIGHT, CONSOLE_MIN_WIDTH};
 use egui::{CursorIcon, Event, Key, Modifiers, MouseWheelUnit, PointerButton, Pos2, Vec2};
 use pet_core::is_supported_audio_file;
+use std::cell::RefCell;
 use std::ffi::c_void;
 use std::mem::{size_of, zeroed};
 use std::path::PathBuf;
@@ -204,7 +205,7 @@ impl SharedWindowState {
 /// Native Win32 resizable window backed by a 32-bit DIBSection (zero GPU, zero WebView2).
 pub struct NativeConsoleWindow {
     hwnd: HWND,
-    state: Box<SharedWindowState>,
+    state: Box<RefCell<SharedWindowState>>,
 }
 
 impl NativeConsoleWindow {
@@ -247,12 +248,12 @@ impl NativeConsoleWindow {
         let class_name = to_wide("YumeRhythmConsoleWindowClass");
         let title = to_wide("桌宠节奏师 · 控制台");
 
-        let mut state = Box::new(SharedWindowState::new(
+        let state = Box::new(RefCell::new(SharedWindowState::new(
             client_w.max(1) as u32,
             client_h.max(1) as u32,
             scale,
-        ));
-        let state_ptr = (&mut *state) as *mut SharedWindowState as isize;
+        )));
+        let state_ptr = (&*state) as *const RefCell<SharedWindowState> as isize;
 
         let hwnd = unsafe {
             let hinst = GetModuleHandleW(null());
@@ -277,14 +278,17 @@ impl NativeConsoleWindow {
             DragAcceptFiles(hwnd, 1);
 
             // Sync actual DPI and client rect after creation
-            let actual_dpi = GetDpiForWindow(hwnd);
-            if actual_dpi >= 96 {
-                state.scale_factor = actual_dpi as f32 / 96.0;
-            }
-            let mut rc: RECT = zeroed();
-            if GetClientRect(hwnd, &mut rc) != 0 {
-                state.client_width = (rc.right - rc.left).max(1) as u32;
-                state.client_height = (rc.bottom - rc.top).max(1) as u32;
+            {
+                let mut st = state.borrow_mut();
+                let actual_dpi = GetDpiForWindow(hwnd);
+                if actual_dpi >= 96 {
+                    st.scale_factor = actual_dpi as f32 / 96.0;
+                }
+                let mut rc: RECT = zeroed();
+                if GetClientRect(hwnd, &mut rc) != 0 {
+                    st.client_width = (rc.right - rc.left).max(1) as u32;
+                    st.client_height = (rc.bottom - rc.top).max(1) as u32;
+                }
             }
 
             ShowWindow(hwnd, SW_SHOWNORMAL);
@@ -307,11 +311,12 @@ impl NativeConsoleWindow {
     }
 
     pub fn client_size_px(&self) -> (u32, u32) {
-        (self.state.client_width, self.state.client_height)
+        let st = self.state.borrow();
+        (st.client_width, st.client_height)
     }
 
     pub fn scale_factor(&self) -> f32 {
-        self.state.scale_factor
+        self.state.borrow().scale_factor
     }
 
     /// Pumps any queued messages specifically targeting this console window.
@@ -326,36 +331,45 @@ impl NativeConsoleWindow {
     }
 
     pub fn close_requested(&self) -> bool {
-        self.state.close_requested
+        self.state.borrow().close_requested
     }
 
     pub fn take_dirty(&mut self) -> bool {
-        std::mem::replace(&mut self.state.dirty, false)
+        let mut st = self.state.borrow_mut();
+        std::mem::replace(&mut st.dirty, false)
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.state.dirty
+        self.state.borrow().dirty
     }
 
     pub fn mark_dirty(&mut self) {
-        self.state.dirty = true;
+        self.state.borrow_mut().dirty = true;
     }
 
     pub fn take_events(&mut self) -> Vec<Event> {
-        std::mem::take(&mut self.state.pending_events)
+        std::mem::take(&mut self.state.borrow_mut().pending_events)
     }
 
     pub fn take_dropped_audio_files(&mut self) -> Vec<PathBuf> {
-        std::mem::take(&mut self.state.pending_dropped_audio)
+        std::mem::take(&mut self.state.borrow_mut().pending_dropped_audio)
     }
 
     pub fn take_shortcuts(&mut self) -> Vec<ConsoleShortcut> {
-        std::mem::take(&mut self.state.pending_shortcuts)
+        std::mem::take(&mut self.state.borrow_mut().pending_shortcuts)
     }
 
     pub fn set_cursor_icon(&mut self, icon: CursorIcon) {
-        if self.state.cursor_icon != icon {
-            self.state.cursor_icon = icon;
+        let changed = {
+            let mut st = self.state.borrow_mut();
+            if st.cursor_icon != icon {
+                st.cursor_icon = icon;
+                true
+            } else {
+                false
+            }
+        };
+        if changed {
             unsafe {
                 SetCursor(cursor_for_icon(icon));
             }
@@ -368,8 +382,9 @@ impl NativeConsoleWindow {
     where
         F: FnOnce(&mut [u8], usize, usize, f32),
     {
-        let scale = self.state.scale_factor;
-        let dib = self.state.ensure_dib()?;
+        let mut st = self.state.borrow_mut();
+        let scale = st.scale_factor;
+        let dib = st.ensure_dib()?;
         let w = dib.width() as usize;
         let h = dib.height() as usize;
         draw_fn(dib.as_mut_slice(), w, h, scale);
@@ -397,8 +412,10 @@ impl Drop for NativeConsoleWindow {
                 self.hwnd = null_mut();
             }
         }
-        // Drop DIB explicitly (also happens when Box<SharedWindowState> drops).
-        self.state.dib = None;
+        // Drop DIB explicitly (also happens when Box<RefCell<SharedWindowState>> drops).
+        if let Ok(mut st) = self.state.try_borrow_mut() {
+            st.dib = None;
+        }
     }
 }
 
@@ -489,16 +506,18 @@ unsafe extern "system" fn console_wnd_proc(
     wparam: WPARAM,
     lparam: LPARAM,
 ) -> LRESULT {
-    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut SharedWindowState;
+    let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const RefCell<SharedWindowState>;
     if ptr.is_null() {
         return DefWindowProcW(hwnd, msg, wparam, lparam);
     }
-    let state = &mut *ptr;
+    let cell = &*ptr;
 
     match msg {
         WM_CLOSE => {
-            state.close_requested = true;
-            state.dirty = true;
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                state.close_requested = true;
+                state.dirty = true;
+            }
             0
         }
         WM_ERASEBKGND => 1,
@@ -506,8 +525,10 @@ unsafe extern "system" fn console_wnd_proc(
             let mut ps: PAINTSTRUCT = zeroed();
             let hdc = BeginPaint(hwnd, &mut ps);
             if !hdc.is_null() {
-                if let Some(dib) = &state.dib {
-                    dib.present_to_dc(hdc);
+                if let Ok(state) = cell.try_borrow() {
+                    if let Some(dib) = &state.dib {
+                        dib.present_to_dc(hdc);
+                    }
                 }
             }
             EndPaint(hwnd, &ps);
@@ -517,23 +538,33 @@ unsafe extern "system" fn console_wnd_proc(
             let w = (lparam & 0xFFFF) as u32;
             let h = ((lparam >> 16) & 0xFFFF) as u32;
             if w > 0 && h > 0 {
-                state.client_width = w;
-                state.client_height = h;
-                state.dirty = true;
+                if let Ok(mut state) = cell.try_borrow_mut() {
+                    state.client_width = w;
+                    state.client_height = h;
+                    state.dirty = true;
+                }
             }
             0
         }
         WM_GETMINMAXINFO => {
+            let scale = cell
+                .try_borrow()
+                .map(|s| s.scale_factor)
+                .unwrap_or(1.0);
             let mmi = &mut *(lparam as *mut MINMAXINFO);
-            mmi.ptMinTrackSize.x = ((CONSOLE_MIN_WIDTH as f32) * state.scale_factor).round() as i32;
-            mmi.ptMinTrackSize.y = ((CONSOLE_MIN_HEIGHT as f32) * state.scale_factor).round() as i32;
+            mmi.ptMinTrackSize.x = ((CONSOLE_MIN_WIDTH as f32) * scale).round() as i32;
+            mmi.ptMinTrackSize.y = ((CONSOLE_MIN_HEIGHT as f32) * scale).round() as i32;
             0
         }
         WM_DPICHANGED => {
             let new_dpi = (wparam & 0xFFFF) as u32;
-            if new_dpi >= 96 {
-                state.scale_factor = new_dpi as f32 / 96.0;
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                if new_dpi >= 96 {
+                    state.scale_factor = new_dpi as f32 / 96.0;
+                }
+                state.dirty = true;
             }
+            // Borrow is dropped BEFORE SetWindowPos so synchronous nested WM_SIZE has zero aliasing.
             let suggested = &*(lparam as *const RECT);
             SetWindowPos(
                 hwnd,
@@ -544,83 +575,113 @@ unsafe extern "system" fn console_wnd_proc(
                 suggested.bottom - suggested.top,
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
-            state.dirty = true;
             0
         }
         WM_SETCURSOR => {
             if (lparam & 0xFFFF) as u32 == HTCLIENT {
-                SetCursor(cursor_for_icon(state.cursor_icon));
+                let icon = cell
+                    .try_borrow()
+                    .map(|s| s.cursor_icon)
+                    .unwrap_or(CursorIcon::Default);
+                SetCursor(cursor_for_icon(icon));
                 return 1;
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_MOUSEMOVE => {
-            if !state.tracking_mouse_leave {
+            let need_track = cell
+                .try_borrow()
+                .map(|s| !s.tracking_mouse_leave)
+                .unwrap_or(false);
+            let tracked = if need_track {
                 let mut tme = TRACKMOUSEEVENT {
                     cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
                     dwFlags: TME_LEAVE,
                     hwndTrack: hwnd,
                     dwHoverTime: 0,
                 };
-                if TrackMouseEvent(&mut tme) != 0 {
+                TrackMouseEvent(&mut tme) != 0
+            } else {
+                false
+            };
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                if tracked {
                     state.tracking_mouse_leave = true;
                 }
+                let pos = lparam_to_logical_pos(lparam, state.scale_factor);
+                state.pending_events.push(Event::PointerMoved(pos));
+                state.dirty = true;
             }
-            let pos = lparam_to_logical_pos(lparam, state.scale_factor);
-            state.pending_events.push(Event::PointerMoved(pos));
-            state.dirty = true;
             0
         }
         WM_MOUSELEAVE => {
-            state.tracking_mouse_leave = false;
-            state.pending_events.push(Event::PointerGone);
-            state.dirty = true;
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                state.tracking_mouse_leave = false;
+                state.pending_events.push(Event::PointerGone);
+                state.dirty = true;
+            }
             0
         }
         WM_LBUTTONDOWN | WM_LBUTTONDBLCLK => {
             SetCapture(hwnd);
-            push_pointer_button(state, lparam, PointerButton::Primary, true);
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                push_pointer_button(&mut state, lparam, PointerButton::Primary, true);
+            }
             0
         }
         WM_LBUTTONUP => {
             ReleaseCapture();
-            push_pointer_button(state, lparam, PointerButton::Primary, false);
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                push_pointer_button(&mut state, lparam, PointerButton::Primary, false);
+            }
             0
         }
         WM_RBUTTONDOWN => {
-            push_pointer_button(state, lparam, PointerButton::Secondary, true);
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                push_pointer_button(&mut state, lparam, PointerButton::Secondary, true);
+            }
             0
         }
         WM_RBUTTONUP => {
-            push_pointer_button(state, lparam, PointerButton::Secondary, false);
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                push_pointer_button(&mut state, lparam, PointerButton::Secondary, false);
+            }
             0
         }
         WM_MBUTTONDOWN => {
-            push_pointer_button(state, lparam, PointerButton::Middle, true);
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                push_pointer_button(&mut state, lparam, PointerButton::Middle, true);
+            }
             0
         }
         WM_MBUTTONUP => {
-            push_pointer_button(state, lparam, PointerButton::Middle, false);
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                push_pointer_button(&mut state, lparam, PointerButton::Middle, false);
+            }
             0
         }
         WM_MOUSEWHEEL => {
             let delta = ((wparam >> 16) as i16) as f32 / (WHEEL_DELTA as f32);
-            state.pending_events.push(Event::MouseWheel {
-                unit: MouseWheelUnit::Point,
-                delta: Vec2::new(0.0, delta * 48.0),
-                modifiers: current_modifiers(),
-            });
-            state.dirty = true;
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                state.pending_events.push(Event::MouseWheel {
+                    unit: MouseWheelUnit::Point,
+                    delta: Vec2::new(0.0, delta * 48.0),
+                    modifiers: current_modifiers(),
+                });
+                state.dirty = true;
+            }
             0
         }
         WM_MOUSEHWHEEL => {
             let delta = ((wparam >> 16) as i16) as f32 / (WHEEL_DELTA as f32);
-            state.pending_events.push(Event::MouseWheel {
-                unit: MouseWheelUnit::Point,
-                delta: Vec2::new(-delta * 48.0, 0.0),
-                modifiers: current_modifiers(),
-            });
-            state.dirty = true;
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                state.pending_events.push(Event::MouseWheel {
+                    unit: MouseWheelUnit::Point,
+                    delta: Vec2::new(-delta * 48.0, 0.0),
+                    modifiers: current_modifiers(),
+                });
+                state.dirty = true;
+            }
             0
         }
         WM_KEYDOWN | WM_SYSKEYDOWN => {
@@ -631,19 +692,25 @@ unsafe extern "system" fn console_wnd_proc(
             if modifiers.ctrl && !modifiers.alt {
                 match vk {
                     0x43 => {
-                        state.pending_events.push(Event::Copy);
-                        state.dirty = true;
+                        if let Ok(mut state) = cell.try_borrow_mut() {
+                            state.pending_events.push(Event::Copy);
+                            state.dirty = true;
+                        }
                         return 0;
                     }
                     0x58 => {
-                        state.pending_events.push(Event::Cut);
-                        state.dirty = true;
+                        if let Ok(mut state) = cell.try_borrow_mut() {
+                            state.pending_events.push(Event::Cut);
+                            state.dirty = true;
+                        }
                         return 0;
                     }
                     0x56 => {
                         if let Some(text) = read_clipboard_text(hwnd) {
-                            state.pending_events.push(Event::Paste(text));
-                            state.dirty = true;
+                            if let Ok(mut state) = cell.try_borrow_mut() {
+                                state.pending_events.push(Event::Paste(text));
+                                state.dirty = true;
+                            }
                         }
                         return 0;
                     }
@@ -651,64 +718,70 @@ unsafe extern "system" fn console_wnd_proc(
                 }
             }
 
-            if !repeat && !modifiers.ctrl && !modifiers.alt {
-                match vk {
-                    VK_SPACE => state.pending_shortcuts.push(ConsoleShortcut::ToggleAudio),
-                    0x51 => state.pending_shortcuts.push(ConsoleShortcut::StopAudio), // Q
-                    0x48 => state.pending_shortcuts.push(ConsoleShortcut::HideConsole), // H
-                    _ => {}
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                if !repeat && !modifiers.ctrl && !modifiers.alt {
+                    match vk {
+                        VK_SPACE => state.pending_shortcuts.push(ConsoleShortcut::ToggleAudio),
+                        0x51 => state.pending_shortcuts.push(ConsoleShortcut::StopAudio), // Q
+                        0x48 => state.pending_shortcuts.push(ConsoleShortcut::HideConsole), // H
+                        _ => {}
+                    }
                 }
-            }
 
-            if let Some(key) = vk_to_egui_key(vk) {
-                state.pending_events.push(Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed: true,
-                    repeat,
-                    modifiers,
-                });
-                state.dirty = true;
+                if let Some(key) = vk_to_egui_key(vk) {
+                    state.pending_events.push(Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat,
+                        modifiers,
+                    });
+                    state.dirty = true;
+                }
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_KEYUP | WM_SYSKEYUP => {
             let vk = wparam as VIRTUAL_KEY;
             if let Some(key) = vk_to_egui_key(vk) {
-                state.pending_events.push(Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed: false,
-                    repeat: false,
-                    modifiers: current_modifiers(),
-                });
-                state.dirty = true;
+                if let Ok(mut state) = cell.try_borrow_mut() {
+                    state.pending_events.push(Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: current_modifiers(),
+                    });
+                    state.dirty = true;
+                }
             }
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_CHAR => {
             let unit = (wparam & 0xFFFF) as u16;
-            // Handle UTF-16 surrogate pairs for emoji / supplementary CJK planes
-            if (0xD800..=0xDBFF).contains(&unit) {
-                state.high_surrogate = Some(unit);
-                return 0;
-            }
-            let ch_opt = if (0xDC00..=0xDFFF).contains(&unit) {
-                state
-                    .high_surrogate
-                    .take()
-                    .and_then(|hi| char::decode_utf16([hi, unit]).next())
-                    .and_then(Result::ok)
-            } else {
-                state.high_surrogate = None;
-                char::from_u32(unit as u32)
-            };
+            if let Ok(mut state) = cell.try_borrow_mut() {
+                // Handle UTF-16 surrogate pairs for emoji / supplementary CJK planes
+                if (0xD800..=0xDBFF).contains(&unit) {
+                    state.high_surrogate = Some(unit);
+                    return 0;
+                }
+                let ch_opt = if (0xDC00..=0xDFFF).contains(&unit) {
+                    state
+                        .high_surrogate
+                        .take()
+                        .and_then(|hi| char::decode_utf16([hi, unit]).next())
+                        .and_then(Result::ok)
+                } else {
+                    state.high_surrogate = None;
+                    char::from_u32(unit as u32)
+                };
 
-            if let Some(ch) = ch_opt {
-                // Skip ASCII control characters (handled via WM_KEYDOWN)
-                if !ch.is_control() {
-                    state.pending_events.push(Event::Text(ch.to_string()));
-                    state.dirty = true;
+                if let Some(ch) = ch_opt {
+                    // Skip ASCII control characters (handled via WM_KEYDOWN)
+                    if !ch.is_control() {
+                        state.pending_events.push(Event::Text(ch.to_string()));
+                        state.dirty = true;
+                    }
                 }
             }
             0
@@ -716,6 +789,7 @@ unsafe extern "system" fn console_wnd_proc(
         WM_DROPFILES => {
             let hdrop = wparam as HDROP;
             let count = DragQueryFileW(hdrop, u32::MAX, null_mut(), 0);
+            let mut dropped = Vec::new();
             for idx in 0..count {
                 let len = DragQueryFileW(hdrop, idx, null_mut(), 0);
                 if len > 0 {
@@ -725,13 +799,18 @@ unsafe extern "system" fn console_wnd_proc(
                         let s = String::from_utf16_lossy(&buf[..written as usize]);
                         let path = PathBuf::from(s);
                         if is_supported_audio_file(&path) {
-                            state.pending_dropped_audio.push(path);
-                            state.dirty = true;
+                            dropped.push(path);
                         }
                     }
                 }
             }
             DragFinish(hdrop);
+            if !dropped.is_empty() {
+                if let Ok(mut state) = cell.try_borrow_mut() {
+                    state.pending_dropped_audio.extend(dropped);
+                    state.dirty = true;
+                }
+            }
             0
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),

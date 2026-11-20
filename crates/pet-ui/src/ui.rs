@@ -261,6 +261,7 @@ fn render_status_tab(
 ) {
     // Card 1: Activity Mode (休闲 / 自习)
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         theme::section_title(ui, "当前状态", Some("切换桌宠桌面的休闲与自习场景"));
         ui.add_space(8.0);
         let btn_w = ((ui.available_width() - 8.0) * 0.5).max(100.0);
@@ -294,6 +295,7 @@ fn render_status_tab(
 
     // Card 2: Bidirectional Study Timer
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         ui.horizontal(|ui| {
             theme::section_title(ui, "自习计时器", None);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -349,6 +351,7 @@ fn render_status_tab(
         // Large monospace clock display
         ui.add_space(8.0);
         theme::soft_panel_frame().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             ui.vertical_centered(|ui| {
                 let clock_color = match state.timer.state {
                     TimerState::Running => ACCENT_PINK_DEEP,
@@ -488,6 +491,7 @@ fn render_todo_drawer(
         .count();
 
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         ui.horizontal(|ui| {
             let arrow = if state.todo_open { "▼" } else { "▶" };
             let header_btn = ui.add(
@@ -701,6 +705,7 @@ fn render_emotion_tab(
 
     // Card 1: Expression buttons grouped by 整体 (Base) & 配件 (Accessory)
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         ui.horizontal(|ui| {
             theme::section_title(ui, "表情切换", Some("再次点击当前表情可恢复自然"));
             if state.random_expression.is_some() {
@@ -752,6 +757,7 @@ fn render_emotion_tab(
 
     // Card 2: Random expression toggle + interval slider + per-event matrix
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         theme::section_title(ui, "随机情绪", Some("定时自动触发可爱小表情"));
         ui.add_space(8.0);
 
@@ -900,6 +906,7 @@ fn render_audio_tab(
 
     // Card 1: Main control button + BPM + Beat count + 24-bar level meter + bass meter
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         ui.horizontal(|ui| {
             theme::section_title(ui, "实时节拍同步", None);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -954,6 +961,7 @@ fn render_audio_tab(
 
         // BPM & Beat Count readout panel
         theme::soft_panel_frame().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(RichText::new("实时 BPM").size(11.5).color(TEXT_SECONDARY));
@@ -1037,6 +1045,7 @@ fn render_audio_tab(
             .corner_radius(CornerRadius::same(10))
             .inner_margin(Margin::symmetric(10, 8))
             .show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new("🎵 拖入音频文件直接播放（MP3 / WAV / FLAC / OGG / M4A / AAC）")
@@ -1093,6 +1102,7 @@ fn render_audio_tab(
 
     // Card 2: Output Device Selector
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         theme::section_title(ui, "系统输出设备", Some("选择 WASAPI 回环监听目标"));
         ui.add_space(8.0);
 
@@ -1160,6 +1170,7 @@ fn render_audio_tab(
 
     // Card 3: Collapsible Advanced Settings (高级设置)
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         let arrow = if ui_state.advanced_audio_open {
             "▼"
         } else {
@@ -1207,7 +1218,7 @@ fn render_audio_tab(
             }
         });
         ui.label(
-            RichText::new("数值越小越灵敏，数值越大越抗噪（推荐默认 1.22）")
+            RichText::new("数值越大越灵敏，数值越小越抗噪（推荐默认 1.22）")
                 .size(11.0)
                 .color(TEXT_MUTED),
         );
@@ -1262,6 +1273,7 @@ fn render_settings_tab(
 ) {
     // Card 1: Pet Lock & Timer Chime
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         theme::section_title(ui, "常规设置", None);
         ui.add_space(8.0);
 
@@ -1318,6 +1330,7 @@ fn render_settings_tab(
 
     // Card 2: External Artist Asset Pack & Hot Reload
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         ui.horizontal(|ui| {
             theme::section_title(ui, "角色素材包", Some("支持外置画手素材热重载"));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1333,6 +1346,7 @@ fn render_settings_tab(
 
         ui.add_space(8.0);
         theme::soft_panel_frame().show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
             let pack = if state.asset_status.pack_name.is_empty() {
                 "默认角色包"
             } else {
@@ -1406,6 +1420,7 @@ fn render_settings_tab(
 
     // Card 3: Keyboard Shortcuts Cheatsheet
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         theme::section_title(ui, "快捷键速查", None);
         ui.add_space(8.0);
 
@@ -1433,6 +1448,7 @@ fn render_settings_tab(
 
     // Card 4: Runtime Performance Summary
     theme::card_frame().show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
         ui.horizontal(|ui| {
             theme::section_title(ui, "性能指标摘要", None);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

@@ -424,6 +424,92 @@ mod tests {
         assert!(compositor.static_cache_hits() >= 100);
     }
 
+    #[test]
+    fn render_frame_into_zero_duplicate_buffer_and_200pct_dpi_bench() {
+        let assets = load_embedded_character_assets().expect("embedded assets load");
+        let state = AppState::new(PersistedState::default());
+        let mut animator = CharacterAnimator::new(FastRng::from_seed(99));
+
+        // 200% DPI (1080x1180)
+        let mut compositor = PetCompositor::with_scale_factor(2.0);
+        assert_eq!(compositor.dimensions(), (1080, 1180));
+        assert!(
+            compositor.bgra_buffer().is_empty(),
+            "PetCompositor must not allocate internal bgra_buffer when using render_frame_into"
+        );
+
+        let mut external_dib = vec![0u8; 1080 * 1180 * 4];
+        let idle_telemetry = AudioTelemetry::default();
+        let layers = state.resolve_face_layers(&assets.manifest, &assets.expressions, false);
+
+        // Warm up caches
+        let p0 = animator.step(
+            0.0,
+            &idle_telemetry,
+            false,
+            true,
+            false,
+            false,
+            assets.manifest.nod_amplitude_scale,
+            assets.manifest.nod_tilt_scale,
+        );
+        compositor.render_frame_into(
+            &PetRenderInput {
+                assets: &assets,
+                pose: &p0,
+                layers: &layers,
+                activity_mode: ActivityMode::Chill,
+                music_running: false,
+                timer_active: false,
+                pet_locked: false,
+                elapsed_ms: 0,
+            },
+            &mut external_dib,
+        );
+        assert!(
+            compositor.bgra_buffer().is_empty(),
+            "render_frame_into must keep internal bgra_buffer at 0 bytes"
+        );
+        assert_premultiplied_bgra_invariant(&external_dib);
+
+        let mut times_ms = Vec::with_capacity(100);
+        for i in 1..=100u64 {
+            let now_ms = (i as f64) * (1000.0 / 24.0);
+            let pose = animator.step(
+                now_ms,
+                &idle_telemetry,
+                false,
+                true,
+                false,
+                false,
+                assets.manifest.nod_amplitude_scale,
+                assets.manifest.nod_tilt_scale,
+            );
+            let input = PetRenderInput {
+                assets: &assets,
+                pose: &pose,
+                layers: &layers,
+                activity_mode: ActivityMode::Chill,
+                music_running: false,
+                timer_active: false,
+                pet_locked: false,
+                elapsed_ms: i * 42,
+            };
+            compositor.render_frame_into(&input, &mut external_dib);
+            times_ms.push(compositor.last_render_ms());
+        }
+        assert_premultiplied_bgra_invariant(&external_dib);
+
+        let avg = times_ms.iter().sum::<f64>() / (times_ms.len() as f64);
+        times_ms.sort_by(|a, b| a.total_cmp(b));
+        let p50 = times_ms[times_ms.len() / 2];
+        let p95 = times_ms[(times_ms.len() * 95) / 100];
+        let max = *times_ms.last().unwrap_or(&0.0);
+        println!(
+            "[pet-render bench 100 frames @ 1080x1180 (200% DPI idle)] avg={avg:.3}ms p50={p50:.3}ms p95={p95:.3}ms max={max:.3}ms"
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn pet_window_layered_lifecycle_and_lock_toggle() {
