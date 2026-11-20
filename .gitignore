@@ -1,15 +1,16 @@
-# Dependencies
-node_modules/
+# Rust build outputs
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
 
-# Build & release outputs
+# Legacy / local artifacts
+node_modules/
 dist/
 release/
-.vite/
-*.tsbuildinfo
 
 # Logs & temporary files
 *.log
-npm-debug.log*
 .tmp/
 *.tmp
 

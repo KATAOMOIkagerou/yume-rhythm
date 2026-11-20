@@ -1,0 +1,13 @@
+[package]
+name = "pet-audio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+pet-core.workspace = true
+wasapi.workspace = true
+rustfft.workspace = true
+ringbuf.workspace = true
+symphonia.workspace = true
