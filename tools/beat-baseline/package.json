@@ -1,0 +1,9 @@
+{
+  "name": "yume-beat-baseline",
+  "private": true,
+  "description": "Runs the frozen baseline beat engine in Node and writes reference traces for crates/beat",
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs"
+  }
+}

@@ -1,0 +1,158 @@
+// 控制台主窗口：顶栏、标签栏、四个页面、对话框、窗口内快捷键。
+
+import { Theme } from "theme.slint";
+import { Badge } from "widgets.slint";
+import { Store } from "store.slint";
+import { FocusPage } from "focus.slint";
+import { EmotionPage } from "emotion.slint";
+import { MusicPage } from "music.slint";
+import { SettingsPage } from "settings.slint";
+import { DialogLayer } from "dialog.slint";
+
+export { Theme, Store }
+
+component TabBar inherits Rectangle {
+    in property <[string]> tabs;
+    in-out property <int> current;
+
+    height: 40px;
+    HorizontalLayout {
+        padding-left: Theme.page-padding;
+        padding-right: Theme.page-padding;
+        spacing: 4px;
+        for name[i] in root.tabs: Rectangle {
+            accessible-role: tab;
+            accessible-label: name;
+            accessible-checkable: true;
+            accessible-checked: i == root.current;
+            accessible-action-default => { root.current = i; }
+            horizontal-stretch: 1;
+            label := Text {
+                text: name;
+                font-size: Theme.font-body;
+                font-weight: i == root.current ? 600 : 400;
+                color: i == root.current ? Theme.accent-strong-text
+                    : ta.has-hover ? Theme.text : Theme.text-secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                y: parent.height - 3px;
+                height: 3px;
+                width: i == root.current ? 28px : 0px;
+                x: (parent.width - self.width) / 2;
+                border-radius: 1.5px;
+                background: Theme.accent;
+                animate width { duration: 160ms; easing: ease-out; }
+            }
+            ta := TouchArea {
+                mouse-cursor: MouseCursor.pointer;
+                clicked => { root.current = i; }
+            }
+        }
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.divider;
+    }
+}
+
+export component ConsoleWindow inherits Window {
+    in-out property <int> tab: 0;
+
+    title: "桌宠节奏师";
+    icon: @image-url("icon.png");
+    preferred-width: 400px;
+    preferred-height: 680px;
+    min-width: 360px;
+    min-height: 520px;
+    background: Theme.bg;
+    default-font-family: Theme.font-family;
+    default-font-size: Theme.font-body;
+
+    init => { keys.focus(); }
+    // 换页时原来有焦点的控件被销毁，焦点交还给窗口，空格 / Q / H 才能继续用。
+    changed tab => { keys.focus(); }
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.modifiers.control || event.modifiers.alt || event.modifiers.meta) {
+                return reject;
+            }
+            if (event.text == " ") {
+                Store.audio-toggle();
+                return accept;
+            }
+            if (event.text == "q" || event.text == "Q") {
+                Store.audio-stop();
+                return accept;
+            }
+            if (event.text == "h" || event.text == "H") {
+                Store.hide-console();
+                return accept;
+            }
+            reject
+        }
+
+        VerticalLayout {
+            HorizontalLayout {
+                padding-left: Theme.page-padding + 2px;
+                padding-right: Theme.page-padding;
+                padding-top: 14px;
+                padding-bottom: 6px;
+                spacing: 8px;
+                VerticalLayout {
+                    spacing: 1px;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: Store.header.character;
+                        font-size: 18px;
+                        font-weight: 600;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: "桌宠节奏师";
+                        font-size: Theme.font-caption;
+                        color: Theme.text-muted;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    HorizontalLayout {
+                        spacing: 6px;
+                        if Store.header.locked: Badge {
+                            text: "已锁定";
+                            tone: Theme.amber;
+                            tone-soft: Theme.amber-soft;
+                        }
+                        Badge {
+                            text: Store.header.audio-text;
+                            dot: true;
+                            tone: Store.header.audio-active ? Theme.green : Theme.text-secondary;
+                            tone-soft: Store.header.audio-active ? Theme.green-soft : Theme.surface-alt;
+                        }
+                    }
+                }
+            }
+
+            TabBar {
+                tabs: ["专注", "表情", "音乐", "设置"];
+                current <=> root.tab;
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                if root.tab == 0: FocusPage { }
+                if root.tab == 1: EmotionPage { }
+                if root.tab == 2: MusicPage { }
+                if root.tab == 3: SettingsPage { }
+            }
+        }
+    }
+
+    if Store.dialog != 0: DialogLayer {
+        kind: Store.dialog;
+    }
+}

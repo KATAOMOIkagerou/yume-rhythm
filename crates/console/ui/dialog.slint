@@ -1,0 +1,62 @@
+// 确认框与鼓励框，盖在整个控制台上。
+
+import { Theme } from "theme.slint";
+import { ButtonKind, PillButton } from "widgets.slint";
+import { Store } from "store.slint";
+
+export component DialogLayer inherits Rectangle {
+    // 0 无，1 确认暂停，2 确认离开自习，3 鼓励
+    in property <int> kind;
+
+    background: Theme.scrim;
+
+    // 吞掉背后的点击。
+    TouchArea { }
+
+    panel := Rectangle {
+        width: min(root.width - 48px, 320px);
+        height: body.preferred-height;
+        background: Theme.surface;
+        border-radius: 18px;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #2d243140;
+        drop-shadow-offset-y: 6px;
+
+        body := VerticalLayout {
+            padding: 20px;
+            spacing: 10px;
+            Text {
+                text: root.kind == 1 ? "要暂停倒计时吗？"
+                    : root.kind == 2 ? "要离开自习吗？"
+                    : "好的，继续加油！";
+                font-size: 16px;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.kind == 1 ? "暂停后可以随时继续，进度会保留。"
+                    : root.kind == 2 ? "计时会先暂停，然后切换到休闲模式。"
+                    : "专注的每一分钟都算数。";
+                font-size: Theme.font-body;
+                color: Theme.text-secondary;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                padding-top: 6px;
+                spacing: 8px;
+                alignment: end;
+                if root.kind != 3: PillButton {
+                    kind: ButtonKind.secondary;
+                    text: root.kind == 1 ? "继续专注" : "留下来";
+                    clicked => { Store.dialog-cancel(); }
+                }
+                PillButton {
+                    kind: ButtonKind.primary;
+                    text: root.kind == 1 ? "暂停" : root.kind == 2 ? "离开" : "好";
+                    clicked => { Store.dialog-confirm(); }
+                }
+            }
+        }
+    }
+}

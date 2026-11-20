@@ -1,0 +1,156 @@
+// 「表情」页：手动表情、随机表情、随机事件开关矩阵。
+
+import { SpinBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Badge, Card, Chip, Notice, SettingRow } from "widgets.slint";
+import { Check, Toggle } from "controls.slint";
+import { Store, ExpressionChip } from "store.slint";
+
+component ChipGroup inherits Card {
+    in property <[ExpressionChip]> chips;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        for chip in root.chips: Chip {
+            text: chip.name;
+            selected: chip.active;
+            enabled: chip.enabled;
+            clicked => { Store.select-expression(chip.id); }
+        }
+    }
+}
+
+component IntervalRow inherits SettingRow {
+    title: "间隔";
+    description: "每隔多少秒换一个随机表情";
+
+    interval := SpinBox {
+        width: 110px;
+        minimum: 5;
+        maximum: 86400;
+        step-size: 5;
+        value: Store.emotion.random-interval;
+        enabled: Store.emotion.random-enabled;
+        edited(v) => { Store.set-random-interval(v); }
+    }
+
+    property <int> model-interval: Store.emotion.random-interval;
+    changed model-interval => {
+        if (interval.value != root.model-interval) {
+            interval.value = root.model-interval;
+        }
+    }
+}
+
+component EventMatrix inherits Card {
+    title: "随机事件";
+    hint: "哪些场景下会随机出现";
+
+    HorizontalLayout {
+        spacing: 8px;
+        Rectangle { horizontal-stretch: 1; }
+        for column in Store.event-columns: Text {
+            width: 56px;
+            text: column;
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+    for row[r] in Store.event-rows: HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: row.name;
+            font-size: Theme.font-body;
+            color: Theme.text;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        for cell[c] in row.cells: HorizontalLayout {
+            width: 56px;
+            alignment: center;
+            Check {
+                label: row.name + " · " + Store.event-columns[c];
+                checked: cell.on;
+                enabled: cell.editable;
+                tone: Theme.violet;
+                toggled(on) => { Store.set-event(r, c, on); }
+            }
+        }
+    }
+}
+
+export component EmotionPage inherits ScrollView {
+    content-width: self.visible-width;
+    VerticalLayout {
+        padding: Theme.page-padding;
+        spacing: Theme.gap;
+        alignment: start;
+
+        Card {
+            HorizontalLayout {
+                spacing: 10px;
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: "现在的表情";
+                        font-size: Theme.font-caption;
+                        color: Theme.text-muted;
+                    }
+                    Text {
+                        text: Store.emotion.current-name;
+                        font-size: 22px;
+                        font-weight: 600;
+                        color: Theme.text;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    if Store.emotion.current-random: Badge {
+                        text: "随机";
+                        tone: Theme.violet;
+                        tone-soft: Theme.violet-soft;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            Text {
+                text: "再点一次当前表情，就会回到自然表情。";
+                font-size: Theme.font-caption;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+
+        ChipGroup {
+            title: "整体表情";
+            chips: Store.base-expressions;
+        }
+
+        ChipGroup {
+            title: "配件与局部";
+            chips: Store.accessory-expressions;
+        }
+
+        if Store.emotion.doze-note: Notice {
+            text: "播放音乐时不会打瞌睡。";
+        }
+
+        Card {
+            title: "随机表情";
+            SettingRow {
+                title: "自动换表情";
+                description: "随机挑一个表情，持续一会儿后恢复";
+                Toggle {
+                    label: "自动换表情";
+                    checked: Store.emotion.random-enabled;
+                    toggled(on) => { Store.set-random-enabled(on); }
+                }
+            }
+            IntervalRow { }
+        }
+
+        EventMatrix { }
+    }
+}

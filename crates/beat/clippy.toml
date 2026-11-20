@@ -1,0 +1,12 @@
+# L0 纯逻辑 crate：时间、随机数、线程都必须从外部注入（docs/架构.md 第 6 节）
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+disallowed-methods = [
+  { path = "std::time::Instant::now", reason = "L0 crate 不读系统时钟，时间从参数传入（docs/架构.md 第 6 节）" },
+  { path = "std::time::SystemTime::now", reason = "L0 crate 不读系统时钟，时间从参数传入（docs/架构.md 第 6 节）" },
+  { path = "std::thread::spawn", reason = "L0 crate 不开线程（docs/架构.md 第 5 节）" },
+]
+disallowed-types = [
+  { path = "std::time::Instant", reason = "L0 crate 不读系统时钟，用毫秒数值表示时间" },
+]

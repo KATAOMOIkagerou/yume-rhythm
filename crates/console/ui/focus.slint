@@ -1,0 +1,203 @@
+// 「专注」页：活动模式、学习计时、待办清单。
+
+import { LineEdit, SpinBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Card, Chip, IconButton, Meter, PillButton, ButtonKind, Segmented } from "widgets.slint";
+import { Check } from "controls.slint";
+import { Store, TodoRow } from "store.slint";
+
+component MinutesRow inherits HorizontalLayout {
+    spacing: 6px;
+    alignment: start;
+    minutes := SpinBox {
+        width: 92px;
+        minimum: 1;
+        maximum: 999;
+        value: Store.focus.minutes;
+        enabled: Store.focus.minutes-editable;
+        edited(v) => { Store.set-minutes(v); }
+    }
+    Text {
+        text: "分钟";
+        font-size: Theme.font-body;
+        color: Theme.text-secondary;
+        vertical-alignment: center;
+    }
+    Rectangle { horizontal-stretch: 1; }
+    for preset in [15, 25, 45, 60]: Chip {
+        text: "\{preset}";
+        compact: true;
+        selected: Store.focus.minutes == preset;
+        enabled: Store.focus.minutes-editable;
+        clicked => { Store.set-minutes(preset); }
+    }
+
+    property <int> model-minutes: Store.focus.minutes;
+    changed model-minutes => {
+        if (minutes.value != self.model-minutes) {
+            minutes.value = self.model-minutes;
+        }
+    }
+}
+
+component TimerCard inherits Card {
+    title: "学习计时";
+
+    HorizontalLayout {
+        spacing: 8px;
+        Segmented {
+            options: ["自习", "休闲"];
+            current: Store.focus.study ? 0 : 1;
+            selected(i) => { Store.select-activity(i == 0); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Segmented {
+            options: ["倒计时", "正计时"];
+            current: Store.focus.countdown ? 0 : 1;
+            enabled: !Store.focus.mode-locked;
+            selected(i) => { Store.set-countdown(i == 0); }
+        }
+    }
+
+    VerticalLayout {
+        padding-top: 6px;
+        padding-bottom: 2px;
+        spacing: 2px;
+        Text {
+            text: Store.focus.time-text;
+            font-size: Theme.font-display;
+            font-weight: 300;
+            color: Store.focus.phase == 3 ? Theme.accent : Theme.text;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: Store.focus.status-text;
+            font-size: Theme.font-caption;
+            color: Store.focus.phase == 3 ? Theme.accent-strong-text : Theme.text-muted;
+            horizontal-alignment: center;
+        }
+    }
+
+    if Store.focus.show-progress: Meter {
+        value: Store.focus.progress;
+        striped: Store.focus.phase == 2;
+    }
+
+    if Store.focus.countdown: MinutesRow { }
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: center;
+        PillButton {
+            kind: Store.focus.phase == 1 ? ButtonKind.secondary : ButtonKind.primary;
+            min-width: 128px;
+            text: Store.focus.phase == 0 ? "开始专注"
+                : Store.focus.phase == 1 ? "暂停"
+                : Store.focus.phase == 2 ? "继续"
+                : "再来一轮";
+            clicked => { Store.timer-primary(); }
+        }
+        if Store.focus.can-reset: PillButton {
+            kind: ButtonKind.ghost;
+            text: "重置";
+            clicked => { Store.timer-reset(); }
+        }
+    }
+}
+
+component TodoLine inherits HorizontalLayout {
+    in property <TodoRow> item;
+    in property <bool> can-remove;
+    spacing: 8px;
+
+    VerticalLayout {
+        alignment: center;
+        Check {
+            label: "完成：" + root.item.text;
+            checked: root.item.done;
+            toggled(on) => { Store.todo-set-done(root.item.id, on); }
+        }
+    }
+    edit := LineEdit {
+        text: root.item.text;
+        placeholder-text: "写下一件要做的事";
+        font-size: Theme.font-body;
+        edited(t) => { Store.todo-set-text(root.item.id, t); }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            glyph: "×";
+            tooltip: "删除这一项";
+            enabled: root.can-remove;
+            clicked => { Store.todo-remove(root.item.id); }
+        }
+    }
+
+    // 用户输入会断开 text 的绑定；数据被规范化（如截断）后在这里同步回来。
+    changed item => {
+        if (edit.text != root.item.text) {
+            edit.text = root.item.text;
+        }
+    }
+}
+
+component TodoCard inherits Card {
+    title: "";
+
+    HorizontalLayout {
+        spacing: 8px;
+        name := LineEdit {
+            text: Store.todo.name;
+            placeholder-text: "清单名称";
+            font-size: Theme.font-title;
+            edited(t) => { Store.todo-rename(t); }
+        }
+        Text {
+            text: "\{Store.todo.done-count}/\{Store.todo.total} 已完成";
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+    }
+
+    for row in Store.todo-items: TodoLine {
+        item: row;
+        can-remove: Store.todo.can-remove;
+    }
+
+    HorizontalLayout {
+        alignment: space-between;
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "+ 添加一项";
+            clicked => { Store.todo-add(); }
+        }
+        Text {
+            text: "修改会自动保存";
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+        }
+    }
+
+    // 用户输入会断开 text 的绑定；名称被规范化后在这里同步回来。
+    property <string> model-name: Store.todo.name;
+    changed model-name => {
+        if (name.text != self.model-name) {
+            name.text = self.model-name;
+        }
+    }
+}
+
+export component FocusPage inherits ScrollView {
+    content-width: self.visible-width;
+    VerticalLayout {
+        padding: Theme.page-padding;
+        spacing: Theme.gap;
+        alignment: start;
+        TimerCard { }
+        TodoCard { }
+    }
+}

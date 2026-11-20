@@ -1,0 +1,47 @@
+{
+  "format": 2,
+  "id": "sakura",
+  "name": "二次元学霸少女·樱音",
+  "version": "1.0.0",
+  "author": "",
+  "canvas": { "width": 800, "height": 800 },
+  "viewport": { "x": 30, "y": 0, "width": 740, "height": 745 },
+  "display_scale": 0.675,
+  "rigs": {
+    "body": { "pivot": [400, 704] },
+    "head": { "pivot": [400, 452] }
+  },
+  "motion": { "nod_amplitude": 1.0, "nod_tilt": 1.0, "breath": 1.0, "sway": 1.0 },
+  "layers": [
+    { "image": "chair_back.png" },
+    { "image": "body_base.png", "rig": "body" },
+    { "image": "hair_back.png", "rig": "head" },
+    { "image": "head_base.png", "rig": "head" },
+    { "image": "blush_base.png", "rig": "head" },
+    { "slot": "eyes", "rig": "head" },
+    { "slot": "mouth", "rig": "head" },
+    { "image": "hair_front.png", "rig": "head" },
+    { "image": "head_headphones.png", "rig": "head", "when": { "music": true } },
+    { "image": "desk_surface.png" },
+    { "image": "prop_computer_on.png", "when": { "activity": "study" } },
+    { "image": "prop_computer_off.png", "when": { "activity": "chill" } },
+    { "image": "prop_books.png" },
+    { "image": "prop_timer_clock.png", "when": { "timer": true }, "effect": "glow" },
+    { "image": "arms_study.png", "when": { "activity": "study" } },
+    { "image": "arms_chill.png", "when": { "activity": "chill" } },
+    { "slot": "overlay", "rig": "head", "effect": "float" }
+  ],
+  "blink": { "image": "eyes_blink.png", "min_interval_ms": 2400, "max_interval_ms": 5200, "duration_ms": 150 },
+  "effects": {
+    "beat_ring": {
+      "center": [400, 340], "radius": [140, 325], "width": [13.5, 1.5],
+      "color": "#c084fc", "opacity": 0.42, "duration_ms": 620
+    },
+    "notes": {
+      "images": ["note_1.png", "note_2.png", "note_3.png", "note_4.png", "note_5.png"],
+      "area": { "x": 240, "y": 128, "width": 320, "height": 80 },
+      "size": 36, "rise": 110, "drift": 50,
+      "hue": [190, 320], "chance": 0.85, "max": 12, "duration_ms": 1500
+    }
+  }
+}

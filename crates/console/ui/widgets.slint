@@ -1,0 +1,317 @@
+// 通用小部件：卡片、按钮、标签、分段选择、开关、复选框、进度条。
+// 只负责外观和交互反馈，不含任何业务含义。
+
+import { Theme } from "theme.slint";
+
+export component Card inherits Rectangle {
+    in property <string> title;
+    in property <string> hint;
+    background: Theme.surface;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    VerticalLayout {
+        padding: Theme.card-padding;
+        spacing: Theme.gap;
+        if root.title != "": HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.title;
+                font-size: Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.hint;
+                font-size: Theme.font-caption;
+                color: Theme.text-muted;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+        @children
+    }
+}
+
+export enum ButtonKind { primary, secondary, ghost, danger }
+
+export component PillButton inherits Rectangle {
+    in property <string> text;
+    in property <ButtonKind> kind: ButtonKind.secondary;
+    in property <bool> enabled: true;
+    in property <bool> compact;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.clicked(); }
+
+    min-height: root.compact ? 28px : 36px;
+    min-width: label.preferred-width + (root.compact ? 22px : 34px);
+    horizontal-stretch: 0;
+    border-radius: self.height / 2;
+    opacity: root.enabled ? 1 : 0.45;
+    background: root.kind == ButtonKind.primary
+        ? (ta.pressed ? Theme.accent-pressed : ta.has-hover ? Theme.accent-hover : Theme.accent)
+        : root.kind == ButtonKind.secondary
+        ? (ta.pressed ? Theme.border : ta.has-hover ? Theme.surface-hover : Theme.surface-alt)
+        : root.kind == ButtonKind.danger
+        ? (ta.has-hover ? Theme.red-soft : transparent)
+        : (ta.has-hover ? Theme.surface-alt : transparent);
+    border-width: root.kind == ButtonKind.danger ? 1px : 0px;
+    border-color: Theme.red;
+    animate background { duration: 120ms; }
+
+    label := Text {
+        text: root.text;
+        font-size: root.compact ? Theme.font-caption : Theme.font-body;
+        font-weight: root.kind == ButtonKind.primary ? 600 : 500;
+        color: root.kind == ButtonKind.primary ? Theme.text-on-accent
+            : root.kind == ButtonKind.danger ? Theme.red
+            : root.kind == ButtonKind.ghost ? Theme.text-secondary
+            : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// 可选中的小标签。
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    in property <bool> enabled: true;
+    in property <color> tone: Theme.accent;
+    in property <color> tone-soft: Theme.accent-soft;
+    in property <bool> compact;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
+
+    min-height: root.compact ? 28px : 32px;
+    min-width: label.preferred-width + (root.compact ? 18px : 28px);
+    border-radius: self.height / 2;
+    opacity: root.enabled ? 1 : 0.4;
+    background: root.selected ? root.tone-soft : ta.has-hover ? Theme.surface-hover : Theme.surface-alt;
+    border-width: root.selected ? 1.5px : 0px;
+    border-color: root.tone;
+    animate background { duration: 120ms; }
+
+    label := Text {
+        text: root.text;
+        font-size: Theme.font-body;
+        font-weight: root.selected ? 600 : 400;
+        color: root.selected ? root.tone : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+}
+
+/// 分段选择。
+export component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in property <int> current;
+    in property <bool> enabled: true;
+    callback selected(int);
+
+    accessible-role: tab-list;
+
+    min-height: 32px;
+    border-radius: self.height / 2;
+    background: Theme.surface-alt;
+    opacity: root.enabled ? 1 : 0.5;
+
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+        for option[i] in root.options: Rectangle {
+            accessible-role: tab;
+            accessible-label: option;
+            accessible-enabled: root.enabled;
+            accessible-checkable: true;
+            accessible-checked: i == root.current;
+            accessible-action-default => { root.selected(i); }
+            border-radius: self.height / 2;
+            background: i == root.current ? Theme.surface : transparent;
+            drop-shadow-blur: i == root.current ? 3px : 0px;
+            drop-shadow-color: #2d243122;
+            drop-shadow-offset-y: 1px;
+            min-width: t.preferred-width + 24px;
+            animate background { duration: 120ms; }
+            t := Text {
+                text: option;
+                font-size: Theme.font-body;
+                font-weight: i == root.current ? 600 : 400;
+                color: i == root.current ? Theme.text : Theme.text-secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                enabled: root.enabled && i != root.current;
+                mouse-cursor: self.enabled ? MouseCursor.pointer : MouseCursor.default;
+                clicked => { root.selected(i); }
+            }
+        }
+    }
+}
+
+/// 一行设置：左边标题与说明，右边控件。
+export component SettingRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> description;
+    spacing: 12px;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 2px;
+        Text {
+            text: root.title;
+            font-size: Theme.font-body;
+            color: Theme.text;
+        }
+        if root.description != "": Text {
+            text: root.description;
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        @children
+    }
+}
+
+/// 水平进度条，`value` 为 0–1。
+export component Meter inherits Rectangle {
+    in property <float> value;
+    in property <color> tone: Theme.accent;
+    in property <bool> striped;
+
+    accessible-role: progress-indicator;
+    accessible-value: round(root.value * 100) + "%";
+
+    height: 6px;
+    border-radius: self.height / 2;
+    background: Theme.surface-alt;
+    clip: true;
+
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(root.value, 0, 1);
+        border-radius: parent.border-radius;
+        background: root.tone;
+        opacity: root.striped ? 0.55 : 1;
+        animate width { duration: 160ms; }
+    }
+}
+
+/// 状态小标签。
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: Theme.text-secondary;
+    in property <color> tone-soft: Theme.surface-alt;
+    in property <bool> dot;
+
+    height: 22px;
+    min-width: row.preferred-width;
+    horizontal-stretch: 0;
+    border-radius: self.height / 2;
+    background: root.tone-soft;
+
+    row := HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 9px;
+        spacing: 5px;
+        alignment: center;
+        if root.dot: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: root.tone;
+            }
+        }
+        Text {
+            text: root.text;
+            font-size: Theme.font-caption;
+            font-weight: 500;
+            color: root.tone;
+            vertical-alignment: center;
+        }
+    }
+}
+
+/// 提示条。
+export component Notice inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: Theme.amber;
+    in property <color> tone-soft: Theme.amber-soft;
+
+    border-radius: Theme.radius-small;
+    background: root.tone-soft;
+    HorizontalLayout {
+        padding: 10px;
+        Text {
+            text: root.text;
+            font-size: Theme.font-caption;
+            color: root.tone;
+            wrap: word-wrap;
+        }
+    }
+}
+
+/// 只有一个符号的圆形小按钮。
+export component IconButton inherits Rectangle {
+    in property <string> glyph;
+    in property <bool> enabled: true;
+    in property <string> tooltip;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.tooltip;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { root.clicked(); }
+
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    opacity: root.enabled ? 1 : 0.35;
+    background: ta.has-hover && root.enabled ? Theme.surface-hover : transparent;
+
+    Text {
+        text: root.glyph;
+        font-size: 15px;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+}

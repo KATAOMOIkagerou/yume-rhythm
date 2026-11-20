@@ -1,0 +1,4 @@
+# 真实歌曲与其轨迹不入库（见 README）
+*.wav
+*.trace.json
+node_modules/

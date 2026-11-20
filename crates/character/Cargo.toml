@@ -1,0 +1,21 @@
+[package]
+name = "yume-character"
+description = "L0 角色包、动画与 CPU 合成"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+yume-core.workspace = true
+yume-beat.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+png.workspace = true
+tiny-skia.workspace = true

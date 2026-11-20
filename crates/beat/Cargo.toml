@@ -1,0 +1,18 @@
+[package]
+name = "yume-beat"
+description = "L0 频谱分析与节拍检测（与 JS 基准引擎逐帧一致）"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+# 回归测试读取 tools/beat-baseline 生成的基准轨迹。float_roundtrip 保证浮点数逐位解析。
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }

@@ -1,0 +1,25 @@
+[package]
+name = "yume-console"
+description = "L2 Slint 控制台界面"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+yume-core.workspace = true
+slint.workspace = true
+raw-window-handle.workspace = true
+log.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true
+
+[dev-dependencies]
+# 截图测试：用软件渲染器在无窗口环境下把各页面画成 PNG。
+slint = { workspace = true, features = ["software-renderer-systemfonts", "software-renderer-path"] }
+png.workspace = true

@@ -1,0 +1,235 @@
+// 「音乐」页：监听开关、节拍状态、输出设备、跟拍设置。
+
+import { ComboBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Badge, ButtonKind, Card, Meter, Notice, PillButton, SettingRow } from "widgets.slint";
+import { Toggle } from "controls.slint";
+import { Store } from "store.slint";
+
+component Pulse inherits Rectangle {
+    in property <bool> active;
+    in property <bool> busy;
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+    background: root.active ? Theme.green : root.busy ? Theme.amber : Theme.text-muted;
+}
+
+component LevelRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <float> value;
+    in property <color> tone;
+    spacing: 10px;
+    Text {
+        text: root.label;
+        width: 30px;
+        font-size: Theme.font-caption;
+        color: Theme.text-muted;
+        vertical-alignment: center;
+    }
+    VerticalLayout {
+        alignment: center;
+        Meter {
+            value: root.value;
+            tone: root.tone;
+        }
+    }
+}
+
+component StatusCard inherits Card {
+    HorizontalLayout {
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Pulse {
+                active: Store.music.phase == 2;
+                busy: Store.music.phase == 1;
+            }
+        }
+        Text {
+            text: Store.music.status-text;
+            font-size: Theme.font-title;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+        Text {
+            text: Store.music.source-text;
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+
+    if Store.music.show-bpm: HorizontalLayout {
+        spacing: 10px;
+        padding-top: 4px;
+        HorizontalLayout {
+            spacing: 6px;
+            horizontal-stretch: 1;
+            Text {
+                text: Store.music.bpm-text;
+                font-size: 40px;
+                font-weight: 300;
+                color: Store.music.beat-locked ? Theme.violet : Theme.text-muted;
+                vertical-alignment: bottom;
+            }
+            VerticalLayout {
+                alignment: end;
+                padding-bottom: 7px;
+                Text {
+                    text: "BPM";
+                    font-size: Theme.font-caption;
+                    font-weight: 600;
+                    color: Theme.text-muted;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 6px;
+                PillButton {
+                    compact: true;
+                    text: "÷2";
+                    enabled: Store.music.can-shift;
+                    clicked => { Store.shift-tempo(false); }
+                }
+                PillButton {
+                    compact: true;
+                    text: "×2";
+                    enabled: Store.music.can-shift;
+                    clicked => { Store.shift-tempo(true); }
+                }
+            }
+        }
+    }
+
+    if Store.music.phase == 2: HorizontalLayout {
+        spacing: 8px;
+        Badge {
+            text: Store.music.beat-locked ? "节拍已锁定" : "正在寻找节拍";
+            dot: true;
+            tone: Store.music.beat-locked ? Theme.violet : Theme.text-secondary;
+            tone-soft: Store.music.beat-locked ? Theme.violet-soft : Theme.surface-alt;
+        }
+        Text {
+            text: Store.music.beat-text;
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+
+    LevelRow {
+        label: "音量";
+        value: Store.music.level;
+        tone: Theme.accent;
+    }
+    LevelRow {
+        label: "低频";
+        value: Store.music.bass;
+        tone: Theme.violet;
+    }
+
+    if Store.music.silence-hint: Notice {
+        text: "好像没有声音。确认电脑正在播放音乐，或在下方换一个输出设备。";
+    }
+    if Store.music.error-text != "": Notice {
+        text: Store.music.error-text;
+        tone: Theme.red;
+        tone-soft: Theme.red-soft;
+    }
+
+    HorizontalLayout {
+        padding-top: 4px;
+        spacing: 8px;
+        PillButton {
+            kind: Store.music.phase == 0 ? ButtonKind.primary : ButtonKind.secondary;
+            horizontal-stretch: 1;
+            text: Store.music.button-text;
+            clicked => { Store.audio-primary(); }
+        }
+    }
+    Text {
+        text: "空格 开始/停止 · Q 停止 · 把音乐文件拖到桌宠身上可直接播放";
+        font-size: Theme.font-caption;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}
+
+component DeviceCard inherits Card {
+    title: "声音来源";
+    hint: "监听哪个输出设备";
+
+    HorizontalLayout {
+        spacing: 8px;
+        devices := ComboBox {
+            horizontal-stretch: 1;
+            model: Store.devices;
+            current-index: Store.music.device-index;
+            selected => { Store.select-device(self.current-index); }
+        }
+        PillButton {
+            text: "刷新";
+            clicked => { Store.refresh-devices(); }
+        }
+    }
+    HorizontalLayout {
+        alignment: start;
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "打开系统声音设置 ↗";
+            clicked => { Store.open-sound-settings(); }
+        }
+    }
+
+    property <int> model-index: Store.music.device-index;
+    changed model-index => {
+        if (devices.current-index != root.model-index) {
+            devices.current-index = root.model-index;
+        }
+    }
+}
+
+export component MusicPage inherits ScrollView {
+    content-width: self.visible-width;
+    VerticalLayout {
+        padding: Theme.page-padding;
+        spacing: Theme.gap;
+        alignment: start;
+
+        StatusCard { }
+        DeviceCard { }
+
+        Card {
+            title: "跟拍";
+            SettingRow {
+                title: "自动跟拍";
+                description: "跟着节拍点头、飘出音符";
+                Toggle {
+                    label: "自动跟拍";
+                    checked: Store.music.auto-follow;
+                    toggled(on) => { Store.set-auto-follow(on); }
+                }
+            }
+            SettingRow {
+                title: "显示 BPM";
+                description: "节拍不对时可以用 ×2 / ÷2 纠正";
+                Toggle {
+                    label: "显示 BPM";
+                    checked: Store.music.show-bpm;
+                    toggled(on) => { Store.set-show-bpm(on); }
+                }
+            }
+        }
+    }
+}

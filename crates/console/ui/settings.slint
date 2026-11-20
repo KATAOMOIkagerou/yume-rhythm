@@ -1,0 +1,187 @@
+// 「设置」页：桌宠、角色、通用、快捷键、关于。
+
+import { AboutSlint, ComboBox, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { ButtonKind, Card, Notice, PillButton, SettingRow } from "widgets.slint";
+import { RangeSlider, Toggle } from "controls.slint";
+import { Store } from "store.slint";
+
+component ScaleRow inherits VerticalLayout {
+    spacing: 4px;
+    HorizontalLayout {
+        Text {
+            text: "大小";
+            font-size: Theme.font-body;
+            color: Theme.text;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: Store.settings.pet-scale-text;
+            font-size: Theme.font-body;
+            color: Theme.text-secondary;
+        }
+    }
+    scale := RangeSlider {
+        label: "桌宠大小";
+        minimum: 0.5;
+        maximum: 2.0;
+        step: 0.05;
+        value: Store.settings.pet-scale;
+        changed(v) => { Store.set-pet-scale(v); }
+    }
+
+    property <float> model-scale: Store.settings.pet-scale;
+    changed model-scale => {
+        if (abs(scale.value - root.model-scale) > 0.001) {
+            scale.value = root.model-scale;
+        }
+    }
+}
+
+component CharacterCard inherits Card {
+    title: "角色";
+
+    HorizontalLayout {
+        spacing: 8px;
+        picker := ComboBox {
+            horizontal-stretch: 1;
+            model: Store.characters;
+            current-index: Store.settings.character-index;
+            selected => { Store.select-character(self.current-index); }
+        }
+        PillButton {
+            text: "重新载入";
+            clicked => { Store.reload-character(); }
+        }
+    }
+    if Store.settings.character-status != "": Notice {
+        text: Store.settings.character-status;
+        tone: Store.settings.character-failed ? Theme.red : Theme.text-secondary;
+        tone-soft: Store.settings.character-failed ? Theme.red-soft : Theme.surface-alt;
+    }
+
+    property <int> model-index: Store.settings.character-index;
+    changed model-index => {
+        if (picker.current-index != root.model-index) {
+            picker.current-index = root.model-index;
+        }
+    }
+}
+
+component Shortcut inherits HorizontalLayout {
+    in property <string> keys;
+    in property <string> action;
+    spacing: 10px;
+    Rectangle {
+        min-width: k.preferred-width + 14px;
+        height: 22px;
+        horizontal-stretch: 0;
+        border-radius: 6px;
+        background: Theme.surface-alt;
+        border-width: 1px;
+        border-color: Theme.border;
+        k := Text {
+            text: root.keys;
+            font-size: Theme.font-caption;
+            color: Theme.text-secondary;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    Text {
+        text: root.action;
+        font-size: Theme.font-body;
+        color: Theme.text;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+    }
+}
+
+export component SettingsPage inherits ScrollView {
+    content-width: self.visible-width;
+    VerticalLayout {
+        padding: Theme.page-padding;
+        spacing: Theme.gap;
+        alignment: start;
+
+        Card {
+            title: "桌宠";
+            ScaleRow { }
+            SettingRow {
+                title: "锁定桌宠";
+                description: "锁定后鼠标会穿过桌宠。可在托盘菜单或按 Ctrl+Alt+L 解除";
+                Toggle {
+                    label: "锁定桌宠";
+                    checked: Store.settings.locked;
+                    toggled(on) => { Store.set-locked(on); }
+                }
+            }
+            SettingRow {
+                title: "全屏时隐藏";
+                description: "看视频、玩游戏时自动躲起来";
+                Toggle {
+                    label: "全屏时隐藏";
+                    checked: Store.settings.hide-on-fullscreen;
+                    toggled(on) => { Store.set-hide-on-fullscreen(on); }
+                }
+            }
+        }
+
+        CharacterCard { }
+
+        Card {
+            title: "通用";
+            SettingRow {
+                title: "倒计时结束提示音";
+                Toggle {
+                    label: "倒计时结束提示音";
+                    checked: Store.settings.end-sound;
+                    toggled(on) => { Store.set-end-sound(on); }
+                }
+            }
+            SettingRow {
+                title: "开机自动启动";
+                Toggle {
+                    label: "开机自动启动";
+                    checked: Store.settings.autostart;
+                    toggled(on) => { Store.set-autostart(on); }
+                }
+            }
+        }
+
+        Card {
+            title: "快捷键";
+            Shortcut { keys: "Ctrl+Alt+C"; action: "打开控制台"; }
+            Shortcut { keys: "Ctrl+Alt+L"; action: "锁定 / 解除锁定桌宠"; }
+            Shortcut { keys: "空格"; action: "开始 / 停止监听音乐（控制台内）"; }
+            Shortcut { keys: "Q"; action: "停止监听音乐（控制台内）"; }
+            Shortcut { keys: "H"; action: "隐藏控制台（控制台内）"; }
+        }
+
+        Card {
+            title: "关于";
+            hint: Store.settings.version;
+            Text {
+                text: "桌宠节奏师 · MIT 许可";
+                font-size: Theme.font-body;
+                color: Theme.text-secondary;
+            }
+            HorizontalLayout {
+                alignment: center;
+                AboutSlint {
+                    max-height: 120px;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            padding-bottom: 8px;
+            PillButton {
+                kind: ButtonKind.danger;
+                text: "退出桌宠节奏师";
+                clicked => { Store.quit(); }
+            }
+        }
+    }
+}

@@ -1,0 +1,156 @@
+// 界面数据与操作。Rust 侧（src/bind.rs）写入数据、接收回调；页面只读数据、只调回调。
+// 页面里不做业务判断：是否可用、是否显示、文案都由 Rust 侧算好。
+
+export struct HeaderView {
+    character: string,
+    audio-text: string,
+    audio-active: bool,
+    locked: bool,
+}
+
+export struct FocusView {
+    study: bool,
+    countdown: bool,
+    mode-locked: bool,
+    minutes: int,
+    minutes-editable: bool,
+    time-text: string,
+    status-text: string,
+    // 0 未开始，1 计时中，2 已暂停，3 已结束
+    phase: int,
+    progress: float,
+    show-progress: bool,
+    can-reset: bool,
+}
+
+export struct TodoRow {
+    id: int,
+    text: string,
+    done: bool,
+}
+
+export struct TodoView {
+    name: string,
+    can-remove: bool,
+    done-count: int,
+    total: int,
+}
+
+export struct ExpressionChip {
+    id: string,
+    name: string,
+    active: bool,
+    enabled: bool,
+}
+
+export struct EmotionView {
+    current-name: string,
+    current-random: bool,
+    random-enabled: bool,
+    random-interval: int,
+    doze-note: bool,
+}
+
+export struct EventCell {
+    on: bool,
+    editable: bool,
+}
+
+export struct EventRow {
+    name: string,
+    cells: [EventCell],
+}
+
+export struct MusicView {
+    // 0 未开始，1 连接中，2 同步中
+    phase: int,
+    status-text: string,
+    source-text: string,
+    button-text: string,
+    show-bpm: bool,
+    bpm-text: string,
+    beat-locked: bool,
+    beat-text: string,
+    level: float,
+    bass: float,
+    can-shift: bool,
+    silence-hint: bool,
+    error-text: string,
+    device-index: int,
+    auto-follow: bool,
+}
+
+export struct SettingsView {
+    end-sound: bool,
+    pet-scale: float,
+    pet-scale-text: string,
+    locked: bool,
+    hide-on-fullscreen: bool,
+    autostart: bool,
+    character-index: int,
+    character-status: string,
+    character-failed: bool,
+    version: string,
+}
+
+export global Store {
+    in property <HeaderView> header;
+    in property <FocusView> focus;
+    in property <TodoView> todo;
+    in property <[TodoRow]> todo-items;
+    in property <EmotionView> emotion;
+    in property <[ExpressionChip]> base-expressions;
+    in property <[ExpressionChip]> accessory-expressions;
+    in property <[string]> event-columns;
+    in property <[EventRow]> event-rows;
+    in property <MusicView> music;
+    in property <[string]> devices;
+    in property <SettingsView> settings;
+    in property <[string]> characters;
+    // 0 无，1 确认暂停，2 确认离开自习，3 鼓励
+    in property <int> dialog;
+
+    // 专注
+    callback select-activity(bool /* study */);
+    callback set-countdown(bool);
+    callback set-minutes(int);
+    callback timer-primary();
+    callback timer-reset();
+    callback dialog-confirm();
+    callback dialog-cancel();
+
+    // 待办
+    callback todo-rename(string);
+    callback todo-add();
+    callback todo-remove(int);
+    callback todo-set-text(int, string);
+    callback todo-set-done(int, bool);
+
+    // 表情
+    callback select-expression(string);
+    callback set-random-enabled(bool);
+    callback set-random-interval(int);
+    callback set-event(int /* row */, int /* column */, bool);
+
+    // 音乐
+    callback audio-primary();
+    callback audio-toggle();
+    callback audio-stop();
+    callback select-device(int);
+    callback refresh-devices();
+    callback shift-tempo(bool /* double */);
+    callback open-sound-settings();
+    callback set-show-bpm(bool);
+    callback set-auto-follow(bool);
+
+    // 设置
+    callback set-end-sound(bool);
+    callback set-pet-scale(float);
+    callback set-locked(bool);
+    callback set-hide-on-fullscreen(bool);
+    callback set-autostart(bool);
+    callback select-character(int);
+    callback reload-character();
+    callback hide-console();
+    callback quit();
+}

@@ -1,0 +1,26 @@
+[package]
+name = "yume-app"
+description = "L3 组装层：线程、接线、执行副作用"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "yume-rhythm"
+path = "src/main.rs"
+
+[dependencies]
+yume-core.workspace = true
+yume-beat.workspace = true
+yume-character.workspace = true
+yume-win.workspace = true
+yume-audio.workspace = true
+yume-console.workspace = true
+anyhow.workspace = true
+log.workspace = true
+slint.workspace = true
