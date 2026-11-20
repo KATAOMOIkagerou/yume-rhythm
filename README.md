@@ -1,64 +1,79 @@
-# 桌宠节奏师
+# 桌宠节奏师（YumeRhythm · 纯原生 Rust 版）
 
-基于 Electron、React、TypeScript 和 Vite 的透明桌面伴侣，支持音乐跟拍、自习计时、配置式表情和待办清单。
+100% 纯原生 Rust Windows 桌面伴侣，彻底移除 Electron、Node.js、React、Vite、Tailwind 与 WebView2；单进程、零 GPU 进程、零白边逐像素透明穿透、低至个位数 MiB 内存与亚毫秒级渲染。
 
-## 运行
+## 核心特性
+
+- **原生分层透明桌宠窗口**（`crates/pet-render`）
+  - 基于 Win32 `WS_EX_LAYERED` + `UpdateLayeredWindow`（32-bit 预乘 BGRA `DIBSection`）与 `tiny-skia` 紧致包围盒合成器。
+  - Windows DWM 原生 O(1) 逐像素 Alpha 穿透（透明区域自然透传点击，保留柔和边缘），彻底告别 `getImageData` 全画布读回与 `SetWindowRgn`。
+  - 31 张角色素材在加载阶段自动裁剪非零 Alpha 紧致包围盒并预乘，解码常驻内存由 75.7 MiB 压缩至 ~3.1 MiB（节省 95.9%）。
+  - 悬停顶部悬浮工具栏（控制台 / 锁定 / 音频同步），支持拖动定位、拖入本地音频文件直接跟拍，锁定时自动切换 `WS_EX_TRANSPARENT` 整窗点击穿透。
+- **零 GPU 独立浮动控制台**（`crates/pet-ui`）
+  - 基于 `egui` 无头布局 + 纯 Rust CPU 软件光栅化器 + Win32 原生 `HWND`/`BitBlt`，自动加载系统微软雅黑（`msyh.ttc`）并支持原生中文 IME 输入。
+  - 关闭/隐藏控制台时立即销毁窗口与像素缓冲释放内存，后台计时、音频同步与配置状态持续运行。
+  - 包含「状态」「情绪」「音频同步」「设置」四个完整中文标签页、双向自习计时器（倒计时/正计时墙钟防漂移 + 三音完成提示音）、待办清单抽屉、随机动作情境矩阵（音乐期强制禁止打瞌睡）与二次确认弹窗。
+- **纯原生 WASAPI 音频同步与节拍引擎**（`crates/pet-audio`）
+  - `wasapi` 共享模式回环捕获（支持默认输出与枚举指定输出设备）→ 无锁 `ringbuf` → 独立 DSP 线程。
+  - `rustfft` 2048 点 Blackman 窗 FFT + 16 频带对数通量节拍检测器，真正接入灵敏度参数（`1.05..=2.00`，基准 `1.22`）。
+  - 支持拖入本地音乐（MP3 / WAV / FLAC / OGG / AAC / M4A，基于 `symphonia` 解码循环播放并同步跟拍）与内置 112 BPM 演示鼓点、倒计时三音完成提示音合成。
+- **统一状态机与热重载画手素材**（`crates/pet-core` + `crates/pet-app`）
+  - 默认素材内嵌于单文件 `yume-rhythm.exe`，开箱即用；可执行文件同级放置 `character_assets/` 目录（或设置 `YUME_ASSET_DIR`）即可热重载自定义画手素材包，兼容 `manifest.json` + `expressions.json`（支持 PNG / APNG / GIF / 动画 WebP）。
+  - 本地配置、待办与随机事件矩阵原子持久化于 `%LOCALAPPDATA%\YumeRhythm\state.json`。
+
+## 构建与运行
+
+前置依赖：Windows 10/11 + Rust 1.88+（MSVC 工具链与 Windows SDK）。
 
 ```powershell
-npm ci
-npm run build
-npm start
+# 运行全部单元测试（含音频 120 BPM 锁拍、紧致裁剪、渲染器与控制台）
+cargo test --workspace --release
+
+# 构建单文件发布版（target\release\yume-rhythm.exe）
+cargo build --release
+
+# 启动桌宠节奏师
+.\target\release\yume-rhythm.exe
 ```
 
-开发模式：一个终端运行 `npm run dev:vite`，另一个运行 `npm start`。
-如果依赖安装策略阻止 Electron 的安装脚本，需按本机策略批准 Electron 后再安装运行程序。项目使用的镜像可通过 `ELECTRON_MIRROR` 环境变量指定。
+### 内置自检与性能基准命令
 
-## 功能
+```powershell
+# 离线自检（素材裁剪、100 帧预乘合成、4 标签页中文光栅化、120 BPM 锁拍与内存报告）
+.\target\release\yume-rhythm.exe --self-test
 
-- 桌宠采用透明无边框窗口，拖动角色区域可以移动整个桌宠窗口。
-- 右侧控制台现在是独立可拖动窗口，包含「状态」「情绪」「音频同步」「设置」四个中文标签页。关闭控制台只隐藏窗口，计时与音频继续运行。
-- 锁定时禁止拖动并启用点击穿透；可从控制台、系统托盘菜单或快捷键解除锁定。
-- 状态页支持倒计时和正计时，暂停保留毫秒精度；倒计时完成可播放提示音，设置页可关闭。
-- 情绪页由外置 `expressions.json` 自动生成选项；支持整体动画、眼嘴分层和配件叠加，默认每 120 秒随机播放一次。
-- 配件保留已选基础表情；再次点击当前选项恢复自然表情。随机播放结束恢复手动所选状态。
-- 音频同步保留系统音频监听、自动测速和自动跟拍；灵敏度位于高级设置中。移除了本地音乐、麦克风、演示鼓点按钮。拖入音频文件的原有路径仍可使用。
-- 监听设备下拉框展示系统默认输出及可枚举的设备。当前 Electron 系统回环接口只支持默认输出；其他端点明确标为不可直接选择，可通过「打开系统声音设置」更换默认设备后重新监听。
-- 待办清单和全局设置保存在本地。音乐播放期间仍强制禁止打瞌睡。
+# 实机运行性能基准（支持 --with-console、--screenshot 与 --data-dir 隔离测试）
+.\target\release\yume-rhythm.exe --bench 10 --screenshot .tmp\pet.png
+.\target\release\yume-rhythm.exe --bench 10 --with-console --screenshot .tmp\pet_with_console.png
+```
 
 ## 快捷键
 
-| 快捷键 | 操作 |
-|---|---|
-| 空格键 | 开始／停止音频 |
-| Q | 停止音频 |
-| H | 隐藏控制台 |
-| Ctrl＋Alt＋C | 全局打开控制台 |
-| Ctrl＋Alt＋L | 全局锁定／解锁桌宠 |
+| 快捷键 | 作用域 | 操作 |
+| --- | --- | --- |
+| `Ctrl+Alt+C` | 全局 | 打开控制台 |
+| `Ctrl+Alt+L` | 全局 | 锁定 / 解锁桌宠（点击穿透） |
+| `Space` | 窗口聚焦且未输入文本 | 开始 / 停止音频同步 |
+| `Q` | 窗口聚焦且未输入文本 | 停止音频同步 |
+| `H` | 窗口聚焦且未输入文本 | 隐藏控制台（并释放 UI 缓冲） |
 
-普通快捷键在桌宠或控制台获得焦点、且未编辑输入框时生效。若全局快捷键被其他程序占用，仍可使用托盘菜单。退出应用可使用设置页或托盘菜单。
+若全局快捷键被其他程序占用，应用仍可正常启动，可通过系统托盘菜单随时打开控制台、解锁桌宠、启停音频同步或退出程序。
 
-## 校验与打包
+## Workspace 目录结构
 
-```powershell
-npm run build
-npm run verify:features
-npm run verify:desktop
-npm run package:win
+```text
+Cargo.toml                 # Workspace 根配置
+assets/character/          # 内嵌默认角色素材包（manifest.json / expressions.json / PNGs）
+crates/
+├── pet-core/              # 领域模型、状态机、持久化、双向计时、素材紧致加载、m1 动画物理
+├── pet-audio/             # WASAPI 回环/播放、ringbuf、rustfft 2048-FFT、节拍检测、symphonia 解码
+├── pet-render/            # Win32 UpdateLayeredWindow 透明桌宠窗口与 tiny-skia 预乘合成器
+├── pet-ui/                # egui 无头布局 + 纯 Rust CPU 软件光栅化 + Win32 浮动控制台
+└── pet-app/               # 主入口 yume-rhythm.exe：消息循环、系统托盘、全局热键、--self-test / --bench
 ```
 
-- `verify:features` 验证计时公式、暂停续计、表情配置与素材、中文界面文本、提示音生成，以及音频冻结代码和媒体权限逻辑与当前仓库基准一致。
-- `verify:desktop` 启动实际双窗口，验证锁定解锁、配置扩展、表情切换和随机恢复、后台计时、音效开关、待办保存、音频节拍输出与快捷键，并在 `.tmp/` 保存截图。提示音触发使用模拟音频接口验证；真实音频文件仍经过原始检测器。
-- `verify:audio` 继续保留历史安装包逐字节校验，需要通过 `BASELINE_ASAR_PATH` 提供历史 `app.asar`；没有该文件时不能执行此项。
-- `verify-electron-e2e.mjs` 是旧版单窗口界面脚本，仅作历史保留；本次重构使用 `verify:desktop`。
-- `src/audio/frozen-audio-core.js` 与主进程 `configureMediaPermissions()` 的业务逻辑保持不变。
+## 文档
 
-## 源码入口
-
-- `electron/main.cjs` / `preload.cjs`：窗口、锁定、托盘、快捷键和受限通信接口。
-- `src/App.tsx`：共享音频实例、计时状态、表情选择和随机调度。
-- `src/gui/FloatingConsole.tsx`：将控制台挂载到独立原生窗口，同时共享 React 状态与上下文。
-- `src/state/SettingsContext.tsx`：全局设置与本地持久化。
-- `src/state/timer.ts`：双向计时公式与完成提示音。
-- `src/character/expressions.ts` / `assetLoader.ts`：表情配置校验和资源加载。
-
-[逐模块源码修改说明](docs/源码重构说明.md) · [画手素材替换说明](docs/画手素材替换说明.md)
+- [纯原生 Rust 重构设计方案](docs/纯原生Rust重构设计方案.md)
+- [画手素材替换说明](docs/画手素材替换说明.md)
+- [历史模块重构说明](docs/源码重构说明.md)
