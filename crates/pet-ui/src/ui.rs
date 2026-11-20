@@ -1756,7 +1756,8 @@ fn draw_24_bar_level_meter(
     }
 }
 
-/// Computes a fast structural digest of `AppState` fields displayed in the UI so idle frames skip repaint.
+/// Computes a fast structural digest of `AppState` fields actually visible in the header
+/// and currently active tab, so high-frequency audio/timer changes never trigger off-tab repaints.
 pub fn compute_state_digest(
     state: &AppState,
     expressions: &[ExpressionDefinition],
@@ -1766,74 +1767,83 @@ pub fn compute_state_digest(
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
 
+    // Always-visible header & navigation state
     (state.active_tab as u8).hash(&mut h);
     (state.activity_mode as u8).hash(&mut h);
     (state.modal as u8).hash(&mut h);
     state.pet_locked.hash(&mut h);
-    state.todo_open.hash(&mut h);
-    state.todo_saved_notice(now_ms).hash(&mut h);
-    (state.timer.mode as u8).hash(&mut h);
-    (state.timer.state as u8).hash(&mut h);
-    state.timer.study_minutes.hash(&mut h);
-    state.timer.format_display().hash(&mut h);
-    ((state.timer.progress_ratio() * 200.0) as u32).hash(&mut h);
-
-    state.persisted.todo_list.list_name.hash(&mut h);
-    state.persisted.todo_list.items.len().hash(&mut h);
-    for item in &state.persisted.todo_list.items {
-        item.id.hash(&mut h);
-        item.done.hash(&mut h);
-        item.text.hash(&mut h);
-    }
-
-    state.selected_expression_id.hash(&mut h);
-    state
-        .random_expression
-        .as_ref()
-        .map(|e| e.id.as_str())
-        .hash(&mut h);
-    expressions.len().hash(&mut h);
-
-    state.persisted.settings.end_sound_enabled.hash(&mut h);
-    state.persisted.settings.random_enabled.hash(&mut h);
-    state.persisted.settings.random_interval_seconds.hash(&mut h);
-    for ctx_key in EventContextKey::ALL {
-        for ev in RandomEventType::ALL {
-            state.persisted.event_switches.get(ctx_key, ev).hash(&mut h);
-        }
-    }
-
     let t = &state.audio_telemetry;
     (t.mode as u8).hash(&mut h);
     t.running.hash(&mut h);
-    t.busy.hash(&mut h);
-    t.beat.hash(&mut h);
-    t.onset.hash(&mut h);
-    t.bpm.hash(&mut h);
-    t.beats.hash(&mut h);
     t.locked.hash(&mut h);
-    ((t.level * 100.0) as u32).hash(&mut h);
-    ((t.bass * 100.0) as u32).hash(&mut h);
-    t.silence_hint.hash(&mut h);
-    t.file_name.hash(&mut h);
-    t.error.hash(&mut h);
-    ((state.sensitivity * 100.0) as u32).hash(&mut h);
-    state.auto_check_bpm.hash(&mut h);
-    state.auto_follow.hash(&mut h);
-    state.audio_devices.len().hash(&mut h);
-    state.selected_device_id.hash(&mut h);
 
-    state.asset_status.loaded.hash(&mut h);
-    state.asset_status.pack_name.hash(&mut h);
-    state.asset_status.source_hint.hash(&mut h);
-    state.asset_status.error.hash(&mut h);
+    // Tab-specific visible fields only
+    match state.active_tab {
+        MainTab::Status => {
+            state.todo_open.hash(&mut h);
+            state.todo_saved_notice(now_ms).hash(&mut h);
+            (state.timer.mode as u8).hash(&mut h);
+            (state.timer.state as u8).hash(&mut h);
+            state.timer.study_minutes.hash(&mut h);
+            state.timer.format_display().hash(&mut h);
+            ((state.timer.progress_ratio() * 200.0) as u32).hash(&mut h);
 
-    // Only hash metrics when Settings tab is active so Tab 1-3 stay 0% idle CPU.
-    if state.active_tab == MainTab::Settings {
-        metrics.sprite_count.hash(&mut h);
-        metrics.asset_decoded_bytes.hash(&mut h);
-        ((metrics.pet_frame_ms * 10.0) as u32).hash(&mut h);
-        ((metrics.private_memory_mib * 10.0) as u32).hash(&mut h);
+            state.persisted.todo_list.list_name.hash(&mut h);
+            state.persisted.todo_list.items.len().hash(&mut h);
+            for item in &state.persisted.todo_list.items {
+                item.id.hash(&mut h);
+                item.done.hash(&mut h);
+                item.text.hash(&mut h);
+            }
+        }
+        MainTab::Emotion => {
+            state.selected_expression_id.hash(&mut h);
+            state
+                .random_expression
+                .as_ref()
+                .map(|e| e.id.as_str())
+                .hash(&mut h);
+            expressions.len().hash(&mut h);
+            state.persisted.settings.random_enabled.hash(&mut h);
+            state.persisted.settings.random_interval_seconds.hash(&mut h);
+            for ctx_key in EventContextKey::ALL {
+                for ev in RandomEventType::ALL {
+                    state.persisted.event_switches.get(ctx_key, ev).hash(&mut h);
+                }
+            }
+        }
+        MainTab::AudioSync => {
+            t.busy.hash(&mut h);
+            t.bpm.hash(&mut h);
+            t.beats.hash(&mut h);
+            // Quantize to 24 discrete steps matching the 24-bar meter to avoid noisy sub-pixel churn.
+            ((t.level.clamp(0.0, 1.0) * 24.0).round() as u32).hash(&mut h);
+            ((t.bass.clamp(0.0, 1.0) * 24.0).round() as u32).hash(&mut h);
+            t.silence_hint.hash(&mut h);
+            t.file_name.hash(&mut h);
+            t.error.hash(&mut h);
+            ((state.sensitivity * 100.0).round() as u32).hash(&mut h);
+            state.auto_check_bpm.hash(&mut h);
+            state.auto_follow.hash(&mut h);
+            state.audio_devices.len().hash(&mut h);
+            state.selected_device_id.hash(&mut h);
+        }
+        MainTab::Settings => {
+            state.persisted.settings.end_sound_enabled.hash(&mut h);
+            state.asset_status.loaded.hash(&mut h);
+            state.asset_status.pack_name.hash(&mut h);
+            state.asset_status.source_hint.hash(&mut h);
+            state.asset_status.error.hash(&mut h);
+            metrics.sprite_count.hash(&mut h);
+            metrics.asset_decoded_bytes.hash(&mut h);
+            ((metrics.pet_frame_ms * 10.0) as u32).hash(&mut h);
+            ((metrics.private_memory_mib * 10.0) as u32).hash(&mut h);
+        }
+    }
+
+    // Modal-visible fields when a confirmation modal is open
+    if state.modal == pet_core::AppModal::ConfirmSaveTodo {
+        state.persisted.todo_list.list_name.hash(&mut h);
     }
 
     h.finish()

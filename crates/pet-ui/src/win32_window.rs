@@ -610,7 +610,6 @@ unsafe extern "system" fn console_wnd_proc(
                 }
                 let pos = lparam_to_logical_pos(lparam, state.scale_factor);
                 state.pending_events.push(Event::PointerMoved(pos));
-                state.dirty = true;
             }
             0
         }

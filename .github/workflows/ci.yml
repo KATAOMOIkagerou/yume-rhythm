@@ -1,0 +1,46 @@
+name: CI (Pure Native Rust)
+
+on:
+  push:
+    branches: ["rust_dev_sy", "refactor/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-rust-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  check:
+    name: Test & Build (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust stable toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run workspace release tests
+        run: cargo test --workspace --release --locked
+
+      - name: Build release binary
+        run: cargo build --release --locked -p pet-app
+
+      - name: Run built-in self-test
+        shell: pwsh
+        run: |
+          $out = .\target\release\yume-rhythm.exe --self-test | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) {
+            throw "yume-rhythm.exe --self-test exited with code $LASTEXITCODE"
+          }

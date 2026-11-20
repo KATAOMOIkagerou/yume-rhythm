@@ -42,6 +42,7 @@ fn parse_cli_args() -> CliArgs {
     let mut console_screenshot = None;
     let mut console_tab = None;
     let mut with_console = false;
+    let mut with_audio = false;
     let mut is_self_test = false;
     let mut bench_secs: Option<f64> = None;
 
@@ -62,6 +63,7 @@ fn parse_cli_args() -> CliArgs {
                 }
             }
             "--with-console" => with_console = true,
+            "--with-audio" => with_audio = true,
             "--console-tab" => {
                 if let Some(val) = args.get(i + 1) {
                     console_tab = match val.to_ascii_lowercase().as_str() {
@@ -109,6 +111,7 @@ fn parse_cli_args() -> CliArgs {
         CliMode::Bench(BenchOptions {
             duration_secs,
             with_console,
+            with_audio,
             console_tab,
             screenshot,
             console_screenshot,

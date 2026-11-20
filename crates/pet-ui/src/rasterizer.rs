@@ -597,20 +597,61 @@ fn rasterize_triangle(
         if sa == 0 && sr == 0 && sg == 0 && sb == 0 {
             return;
         }
+        let inv_dx0 = if dx0.abs() > 1e-6 { Some(1.0 / dx0) } else { None };
+        let inv_dx1 = if dx1.abs() > 1e-6 { Some(1.0 / dx1) } else { None };
+        let inv_dx2 = if dx2.abs() > 1e-6 { Some(1.0 / dx2) } else { None };
+        let bgra = [sb, sg, sr, 255];
+        let inv_a = (255 - sa) as u32;
+        let span_max = (max_x - min_x) as f32;
+
         for y in min_y..max_y {
-            let mut e0 = row_e0;
-            let mut e1 = row_e1;
-            let mut e2 = row_e2;
-            let row_base = y as usize * fb_width;
-            for x in min_x..max_x {
-                if e0 >= bias0 && e1 >= bias1 && e2 >= bias2 {
-                    let off = (row_base + x as usize) * 4;
-                    blend_premul_bgra(&mut buf[off..off + 4], sr, sg, sb, sa);
+            let mut t_lo = 0.0_f32;
+            let mut t_hi = span_max;
+
+            // Intersect the 3 half-planes `row_e + t * dx >= bias` on this scanline in O(1).
+            let edges = [
+                (row_e0, dx0, inv_dx0, bias0),
+                (row_e1, dx1, inv_dx1, bias1),
+                (row_e2, dx2, inv_dx2, bias2),
+            ];
+            let mut visible = true;
+            for (re, dx, inv_dx, bias) in edges {
+                if let Some(inv) = inv_dx {
+                    let t = (bias - re) * inv;
+                    if dx > 0.0 {
+                        if t > t_lo {
+                            t_lo = t;
+                        }
+                    } else if t < t_hi {
+                        t_hi = t;
+                    }
+                } else if re < bias {
+                    visible = false;
+                    break;
                 }
-                e0 += dx0;
-                e1 += dx1;
-                e2 += dx2;
             }
+
+            if visible {
+                let sx0 = (min_x + t_lo.ceil() as i32).max(min_x);
+                let sx1 = (min_x + t_hi.floor() as i32 + 1).min(max_x);
+                if sx0 < sx1 {
+                    let row_start = (y as usize * fb_width + sx0 as usize) * 4;
+                    let row_end = (y as usize * fb_width + sx1 as usize) * 4;
+                    if sa == 255 {
+                        for px in buf[row_start..row_end].chunks_exact_mut(4) {
+                            px.copy_from_slice(&bgra);
+                        }
+                    } else {
+                        for px in buf[row_start..row_end].chunks_exact_mut(4) {
+                            px[0] = sb.saturating_add(div255(px[0] as u32 * inv_a));
+                            px[1] = sg.saturating_add(div255(px[1] as u32 * inv_a));
+                            px[2] = sr.saturating_add(div255(px[2] as u32 * inv_a));
+                            px[3] = 255;
+                        }
+                    }
+                }
+            }
+
             row_e0 += dy0;
             row_e1 += dy1;
             row_e2 += dy2;

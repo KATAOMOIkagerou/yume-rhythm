@@ -34,6 +34,14 @@ pub struct AnchorRect {
     pub scale_factor: f32,
 }
 
+/// Minimum interval between hover-only (`PointerMoved`) console repaints (~30 fps).
+const HOVER_REPAINT_MIN_INTERVAL: Duration = Duration::from_millis(33);
+/// Minimum interval between passive state/telemetry console repaints (~12.5 fps).
+/// Keeps the 24-bar audio level meter smooth while bounding CPU software rasterizer cost to <0.5% CPU.
+const PASSIVE_REPAINT_MIN_INTERVAL: Duration = Duration::from_millis(80);
+/// Floor for `egui` self-scheduled animation/caret repaints (~15 fps).
+const EGUI_REPAINT_FLOOR: Duration = Duration::from_millis(66);
+
 /// Active native console resources that are created on demand and dropped completely on close.
 struct ActiveConsoleSession {
     window: NativeConsoleWindow,
@@ -41,6 +49,8 @@ struct ActiveConsoleSession {
     rasterizer: SoftwareRasterizer,
     font_info: ChineseFontInfo,
     last_digest: u64,
+    last_paint_at: Option<Instant>,
+    pending_hover: Option<egui::Event>,
     next_repaint_at: Option<Instant>,
     last_mem_sample_at: Option<Instant>,
 }
@@ -114,6 +124,8 @@ impl ConsoleWindow {
             rasterizer: SoftwareRasterizer::new(),
             font_info,
             last_digest: 0,
+            last_paint_at: None,
+            pending_hover: None,
             next_repaint_at: Some(Instant::now()),
             last_mem_sample_at: None,
         });
@@ -181,18 +193,63 @@ impl ConsoleWindow {
             }
         }
 
-        let events = session.window.take_events();
+        let raw_events = session.window.take_events();
         let shortcuts = session.window.take_shortcuts();
-        let input_dirty = !events.is_empty() || !shortcuts.is_empty() || session.window.take_dirty();
+        let window_dirty = session.window.take_dirty();
+
+        // Coalesce high-frequency mouse moves (e.g. 1000Hz gaming mice) while preserving all clicks/keys.
+        let mut events = Vec::with_capacity(raw_events.len() + 1);
+        let mut latest_hover: Option<egui::Event> = None;
+        let mut has_urgent_event = false;
+        for ev in raw_events {
+            if matches!(ev, egui::Event::PointerMoved(_)) {
+                latest_hover = Some(ev);
+            } else {
+                if let Some(hover) = latest_hover.take() {
+                    events.push(hover);
+                }
+                has_urgent_event = true;
+                events.push(ev);
+            }
+        }
+        if let Some(hover) = latest_hover {
+            session.pending_hover = Some(hover);
+        }
+
+        let urgent_dirty =
+            has_urgent_event || !shortcuts.is_empty() || window_dirty || session.last_paint_at.is_none();
+        let hover_dirty = session.pending_hover.is_some();
         let digest = compute_state_digest(state, expressions, &self.metrics, now_ms);
         let state_changed = digest != session.last_digest;
+        let now_inst = Instant::now();
         let timer_due = session
             .next_repaint_at
-            .map(|t| Instant::now() >= t)
+            .map(|t| now_inst >= t)
             .unwrap_or(false);
 
-        if !input_dirty && !state_changed && !timer_due {
+        if !urgent_dirty && !hover_dirty && !state_changed && !timer_due {
             return actions;
+        }
+
+        // Throttle hover-only (~30 fps) and passive telemetry/state repaints (~12.5 fps)
+        // so active audio sync or fast cursor motion never saturates a CPU core.
+        if !urgent_dirty {
+            let elapsed = session
+                .last_paint_at
+                .map(|t| now_inst.saturating_duration_since(t))
+                .unwrap_or(Duration::MAX);
+            let min_interval = if hover_dirty {
+                HOVER_REPAINT_MIN_INTERVAL
+            } else {
+                PASSIVE_REPAINT_MIN_INTERVAL
+            };
+            if elapsed < min_interval {
+                return actions;
+            }
+        }
+
+        if let Some(hover) = session.pending_hover.take() {
+            events.push(hover);
         }
 
         let t0 = Instant::now();
@@ -282,6 +339,8 @@ impl ConsoleWindow {
 
         self.metrics.ui_frame_ms = t0.elapsed().as_secs_f64() as f32 * 1000.0;
         session.last_digest = compute_state_digest(state, expressions, &self.metrics, now_ms);
+        let paint_done = Instant::now();
+        session.last_paint_at = Some(paint_done);
 
         // Schedule next repaint only if egui explicitly requests a finite delay (e.g., caret blink)
         let repaint_after = full_output
@@ -290,7 +349,7 @@ impl ConsoleWindow {
             .map(|v| v.repaint_delay)
             .unwrap_or(Duration::MAX);
         session.next_repaint_at = if repaint_after < Duration::from_secs(60) {
-            Some(Instant::now() + repaint_after.max(Duration::from_millis(16)))
+            Some(paint_done + repaint_after.max(EGUI_REPAINT_FLOOR))
         } else {
             None
         };
@@ -840,5 +899,43 @@ mod tests {
         assert_eq!(state.active_tab, MainTab::Settings);
         assert!(state.pet_locked);
         assert_eq!(state.persisted.todo_list.list_name, "保持状态测试");
+    }
+
+    #[test]
+    fn off_tab_audio_telemetry_churn_does_not_invalidate_digest() {
+        let assets = load_embedded_character_assets().expect("embedded assets load");
+        let mut state = AppState::new(PersistedState::default());
+        state.audio_telemetry.running = true;
+        state.audio_telemetry.locked = true;
+        let metrics = ConsoleRuntimeMetrics::default();
+
+        for tab in [MainTab::Status, MainTab::Emotion, MainTab::Settings] {
+            state.active_tab = tab;
+            state.audio_telemetry.level = 0.15;
+            state.audio_telemetry.bass = 0.10;
+            state.audio_telemetry.beats = 1;
+            let d1 = compute_state_digest(&state, &assets.expressions, &metrics, 1000.0);
+
+            state.audio_telemetry.level = 0.92;
+            state.audio_telemetry.bass = 0.88;
+            state.audio_telemetry.beat = true;
+            state.audio_telemetry.onset = true;
+            state.audio_telemetry.beats = 42;
+            state.audio_telemetry.bpm = 128;
+            let d2 = compute_state_digest(&state, &assets.expressions, &metrics, 1010.0);
+
+            assert_eq!(
+                d1, d2,
+                "High-frequency audio telemetry must not dirty off-tab console digest ({tab:?})"
+            );
+        }
+
+        // On AudioSync tab, real meter level changes MUST still trigger repaint.
+        state.active_tab = MainTab::AudioSync;
+        state.audio_telemetry.level = 0.10;
+        let a1 = compute_state_digest(&state, &assets.expressions, &metrics, 1000.0);
+        state.audio_telemetry.level = 0.80;
+        let a2 = compute_state_digest(&state, &assets.expressions, &metrics, 1010.0);
+        assert_ne!(a1, a2, "AudioSync tab must reflect level meter updates");
     }
 }

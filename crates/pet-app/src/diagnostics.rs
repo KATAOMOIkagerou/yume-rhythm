@@ -17,6 +17,7 @@ use std::time::Instant;
 pub struct BenchOptions {
     pub duration_secs: f64,
     pub with_console: bool,
+    pub with_audio: bool,
     pub console_tab: Option<MainTab>,
     pub screenshot: Option<PathBuf>,
     pub console_screenshot: Option<PathBuf>,
@@ -243,6 +244,23 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
             break;
         }
 
+        if opts.with_audio {
+            // Simulate active 120 BPM live audio telemetry fluctuating every loop tick.
+            let elapsed = now_ms - start_ms;
+            let phase = (elapsed % 500.0) / 500.0;
+            let beat_idx = (elapsed / 500.0) as u64;
+            state.audio_telemetry.mode = pet_core::AudioMode::System;
+            state.audio_telemetry.running = true;
+            state.audio_telemetry.locked = true;
+            state.audio_telemetry.bpm = 120;
+            state.audio_telemetry.beats = beat_idx;
+            state.audio_telemetry.period_ms = Some(500.0);
+            state.audio_telemetry.next_beat_at_ms = Some(start_ms + ((beat_idx + 1) as f64) * 500.0);
+            state.audio_telemetry.level = (0.25 + 0.65 * (1.0 - phase).powf(2.0)) as f32;
+            state.audio_telemetry.bass = (0.18 + 0.72 * (1.0 - phase).powf(3.0)) as f32;
+            state.audio_telemetry.strength = 1.1;
+        }
+
         if console.is_visible() {
             let actions = console.update(&mut state, &assets.expressions, now_ms);
             for action in actions {
@@ -255,7 +273,7 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
             let pose = animator.step(
                 now_ms,
                 &state.audio_telemetry,
-                false,
+                opts.with_audio,
                 true,
                 layers.is_dozing,
                 layers.suppress_blink,
@@ -267,7 +285,7 @@ pub fn run_bench(data_dir: &Path, opts: &BenchOptions) -> Result<(), String> {
                 pose: &pose,
                 layers: &layers,
                 activity_mode: state.activity_mode,
-                music_running: false,
+                music_running: opts.with_audio,
                 timer_active: false,
                 pet_locked: state.pet_locked,
                 elapsed_ms: (now_ms - start_ms) as u64,

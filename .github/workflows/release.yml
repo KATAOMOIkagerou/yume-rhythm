@@ -118,9 +118,14 @@ jobs:
           程序未进行代码签名，首次运行如遇 SmartScreen 提示，点击「更多信息」→「仍要运行」。
           "@ | Out-File -Encoding utf8NoBOM dist/notes.md
 
-          gh release create $tag `
-            "dist/$name.zip" `
-            "dist/$name.zip.sha256" `
-            --title "桌宠节奏师 $tag（纯原生 Rust 版）" `
-            --notes-file dist/notes.md `
-            --prerelease
+          $releaseArgs = @(
+            'release', 'create', $tag,
+            "dist/$name.zip",
+            "dist/$name.zip.sha256",
+            '--title', "桌宠节奏师 $tag（纯原生 Rust 版）",
+            '--notes-file', 'dist/notes.md'
+          )
+          if ($tag -match '-') {
+            $releaseArgs += '--prerelease'
+          }
+          & gh @releaseArgs
