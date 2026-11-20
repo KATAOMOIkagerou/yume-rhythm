@@ -1,0 +1,126 @@
+name: Release (Pure Native Rust)
+
+# 推送 v2.* 标签时自动测试、编译、打包并发布到 GitHub Releases；
+# 手动触发（workflow_dispatch）仅打包上传构建产物，不创建 Release。
+on:
+  push:
+    tags:
+      - "v2.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust stable toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run workspace release tests
+        run: cargo test --workspace --release --locked
+
+      - name: Build release binary
+        run: cargo build --release --locked -p pet-app
+
+      - name: Run built-in self-test
+        shell: pwsh
+        run: |
+          $out = .\target\release\yume-rhythm.exe --self-test | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0) {
+            throw "yume-rhythm.exe --self-test exited with code $LASTEXITCODE"
+          }
+
+      - name: Package Windows x64 release archive
+        id: package
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v2.0.0-rust-dev-sy" }
+          $name = "yume-rhythm-$tag-windows-x64"
+          $dir = "dist/$name"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "target/release/yume-rhythm.exe" "$dir/"
+          New-Item -ItemType Directory -Force "$dir/assets" | Out-Null
+          Copy-Item -Recurse "assets/character" "$dir/assets/character"
+          Copy-Item "LICENSE" "$dir/"
+          Copy-Item "README.md" "$dir/"
+          @"
+          桌宠节奏师 · 纯原生 Rust 独立发布版 ($tag)
+          适用系统：Windows 10 / 11 64 位（无需 Node.js / Electron / WebView2 / 浏览器运行时）
+
+          快速启动：
+          1. 将压缩包完整解压至任意目录，双击 yume-rhythm.exe 即可运行。
+          2. 默认角色素材已内置在 exe 中；如需画手自定义替换，可直接编辑同目录下的 assets/character/ 并在控制台「设置」点击「重载素材」。
+
+          常用快捷键：
+          - Ctrl + Alt + C：打开 / 隐藏独立控制台（关闭即释放界面内存，后台音频与计时不受影响）
+          - Ctrl + Alt + L：锁定 / 解锁桌宠（整窗点击穿透）
+          - Space：开始 / 停止音频同步
+          - Q：停止音频同步
+          - H：隐藏控制台
+          - 直接将本地音频文件（MP3/WAV/FLAC/OGG/M4A）拖入桌宠或控制台即可播放并跟拍。
+
+          提示：本发布版未进行代码签名，首次运行如遇 Windows SmartScreen 提示，点击「更多信息」→「仍要运行」即可。
+          "@ | Out-File -Encoding utf8NoBOM "$dir/使用说明.txt"
+
+          Compress-Archive -Path $dir -DestinationPath "dist/$name.zip" -Force
+          $hash = (Get-FileHash "dist/$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
+          "name=$name" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.package.outputs.tag }}"
+          $name = "${{ steps.package.outputs.name }}"
+          @"
+          ## 桌宠节奏师 $tag · 纯原生 Rust 重构版
+
+          本版本源自 `rust_dev_sy` 分支，彻底移除 Electron、Node.js、React、Vite 与 WebView2，采用 100% 纯原生 Rust 实现（5 个解耦 Workspace Crate）：
+
+          ### 核心重构亮点
+          - **零 WebView2 / 零 GPU 进程**：桌宠采用 Win32 `WS_EX_LAYERED` + `UpdateLayeredWindow` + `tiny-skia` 零拷贝预乘 BGRA 合成，透明区域原生 O(1) 点击穿透、零白边、零裁切。
+          - **零 GPU 纯 Rust 控制台**：`egui 0.31` + 自研 CPU 软件光栅化 + 只读 `MapViewOfFile` 映射系统微软雅黑字体，关闭控制台立即销毁窗口与 DIB 表面释放内存。
+          - **原生 WASAPI + `rustfft` 音频引擎**：去除 Base64 / `AudioWorklet` 绕圈链路，支持默认与指定音频输出端点回环监听、本地音频拖拽播放（`symphonia`）、演示鼓点与倒计时三音提示音，并修复灵敏度滑块生效逻辑。
+          - **实测性能提升（Windows 200% DPI）**：
+            - 独占驻留内存：`419.6–799.2 MiB` → **`12.77 MiB`**（仅桌宠）/ **`18.55 MiB`**（含控制台），降低 **95.6%–97.0%**
+            - 10 秒平均 CPU：`4.94%` → **`0.29%`–`0.35%`**，降低 **92.9%–94.1%**
+            - 单帧合成耗时：`p50 = 0.96 ms`（200% DPI 1080×1180），DSP 耗时 `0.067 ms/帧`
+            - 进程结构：单进程 0 子进程（原 7 进程 175 线程）
+
+          ### 使用说明
+          下载 `$name.zip`，解压后直接运行 `yume-rhythm.exe`（Windows 10/11 x64）。
+          程序未进行代码签名，首次运行如遇 SmartScreen 提示，点击「更多信息」→「仍要运行」。
+          "@ | Out-File -Encoding utf8NoBOM dist/notes.md
+
+          gh release create $tag `
+            "dist/$name.zip" `
+            "dist/$name.zip.sha256" `
+            --title "桌宠节奏师 $tag（纯原生 Rust 版）" `
+            --notes-file dist/notes.md `
+            --prerelease
