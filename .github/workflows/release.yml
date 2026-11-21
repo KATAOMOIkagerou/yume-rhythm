@@ -96,5 +96,5 @@ jobs:
           gh release create $env:GITHUB_REF_NAME `
             "dist/${{ steps.package.outputs.name }}.zip" `
             "dist/${{ steps.package.outputs.name }}.zip.sha256" `
-            --title "桌宠节奏师 $env:GITHUB_REF_NAME" `
+            --title "韵梦桌伴 $env:GITHUB_REF_NAME" `
             --notes-file dist/notes.md
