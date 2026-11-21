@@ -30,6 +30,7 @@ pub struct PetWindow {
     pub locked: bool,
     pub visible: bool,
     pub scale: f32,
+    pub opacity: f32,
 }
 
 #[must_use]
@@ -63,5 +64,12 @@ pub fn pet_window(state: &AppState) -> PetWindow {
         locked: state.pet.locked,
         visible: !(state.settings.hide_on_fullscreen && state.pet.fullscreen_active),
         scale: state.settings.pet_scale,
+        opacity: state.settings.pet_opacity,
     }
+}
+
+/// 控制台窗口透明度（0.4–1.0）。
+#[must_use]
+pub fn console_opacity(state: &AppState) -> f32 {
+    state.settings.console_opacity
 }

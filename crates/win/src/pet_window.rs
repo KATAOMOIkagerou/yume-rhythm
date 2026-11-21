@@ -18,9 +18,9 @@ use windows::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDR
 use windows::Win32::UI::WindowsAndMessaging as wm;
 use windows::core::{HSTRING, PCWSTR, Result, w};
 
-const CLASS_NAME: PCWSTR = w!("YumeRhythmPet");
+const CLASS_NAME: PCWSTR = w!("YunMengZhuoBanPet");
 /// 第二个实例启动时广播这条消息，请已运行的实例显示控制台。
-pub const ACTIVATE_MESSAGE: PCWSTR = w!("YumeRhythm.Activate");
+pub const ACTIVATE_MESSAGE: PCWSTR = w!("YunMengZhuoBan.Activate");
 /// 按下后移动超过这么多像素才算拖动，否则算点击。
 const DRAG_THRESHOLD: i32 = 3;
 
@@ -63,6 +63,7 @@ pub struct PetWindow {
     surface: Option<Surface>,
     visible: bool,
     shown: bool,
+    opacity: u8,
 }
 
 impl PetWindow {
@@ -107,6 +108,7 @@ impl PetWindow {
                 surface: None,
                 visible: true,
                 shown: false,
+                opacity: 255,
             })
         }
     }
@@ -138,7 +140,7 @@ impl PetWindow {
         let blend = BLENDFUNCTION {
             BlendOp: AC_SRC_OVER as u8,
             BlendFlags: 0,
-            SourceConstantAlpha: 255,
+            SourceConstantAlpha: self.opacity,
             AlphaFormat: AC_SRC_ALPHA as u8,
         };
         // SAFETY: 窗口与内存 DC 都有效；所有指针指向本函数内的局部变量。
@@ -172,6 +174,40 @@ impl PetWindow {
         }
         if on {
             self.shared.borrow_mut().drag = Drag::default();
+        }
+    }
+
+    /// 整体透明度（0–255），与逐像素 alpha 相乘。
+    pub fn set_opacity(&mut self, alpha: u8) {
+        if self.opacity == alpha {
+            return;
+        }
+        self.opacity = alpha;
+        let Some(surface) = &self.surface else {
+            return;
+        };
+        let (w, h) = surface.size();
+        let size = SIZE { cx: w, cy: h };
+        let origin = POINT { x: 0, y: 0 };
+        let blend = BLENDFUNCTION {
+            BlendOp: AC_SRC_OVER as u8,
+            BlendFlags: 0,
+            SourceConstantAlpha: self.opacity,
+            AlphaFormat: AC_SRC_ALPHA as u8,
+        };
+        // SAFETY: 窗口与内存 DC 均有效，所有指针指向本函数局部变量。
+        unsafe {
+            let _ = wm::UpdateLayeredWindow(
+                self.hwnd,
+                None,
+                None,
+                Some(&raw const size),
+                Some(surface.dc()),
+                Some(&raw const origin),
+                COLORREF(0),
+                Some(&raw const blend),
+                wm::ULW_ALPHA,
+            );
         }
     }
 

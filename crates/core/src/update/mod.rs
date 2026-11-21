@@ -25,13 +25,22 @@ pub fn update(state: &mut AppState, command: Command, ctx: &mut Ctx<'_>) -> Vec<
     let mut fx = Vec::new();
     let now = ctx.now;
     match command {
-        Command::Startup => fx.extend([
-            Effect::ScanCharacters,
-            Effect::LoadCharacter {
-                id: state.settings.character.clone(),
-            },
-            Effect::ListAudioDevices,
-        ]),
+        Command::Startup => {
+            fx.extend([
+                Effect::ScanCharacters,
+                Effect::LoadCharacter {
+                    id: state.settings.character.clone(),
+                },
+                Effect::ListAudioDevices,
+                Effect::ListFonts,
+            ]);
+            if let Some(path) = state.settings.custom_font_path.clone() {
+                fx.push(Effect::LoadCustomFont { path });
+            }
+            if let Some(path) = state.settings.todo_md_path.clone() {
+                fx.push(Effect::LoadTodoMd { path });
+            }
+        }
         Command::Tick => {
             study::tick(state, now, &mut fx);
             let (expressions, situation) = split_expressions(state);
@@ -39,9 +48,9 @@ pub fn update(state: &mut AppState, command: Command, ctx: &mut Ctx<'_>) -> Vec<
         }
         Command::Study(c) => study::handle(state, c, now, &mut fx),
         Command::Expression(c) => expression::handle(state, c),
-        Command::Todo(c) => todo::handle(state, c),
+        Command::Todo(c) => todo::handle(state, c, &mut fx),
         Command::Audio(c) => audio::handle(state, c, now, &mut fx),
-        Command::Settings(c) => settings::handle(state, c),
+        Command::Settings(c) => settings::handle(state, c, now, &mut fx),
         Command::Pet(c) => pet::handle(state, c, &mut fx),
         Command::Character(c) => character::handle(state, c, &mut fx),
     }

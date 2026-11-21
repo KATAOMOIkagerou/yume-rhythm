@@ -1,4 +1,4 @@
-// 界面数据与操作。Rust 侧（src/bind.rs）写入数据、接收回调；页面只读数据、只调回调。
+// 界面数据与操作。Rust 侧（src/bind/）写入数据、接收回调；页面只读数据、只调回调。
 // 页面里不做业务判断：是否可用、是否显示、文案都由 Rust 侧算好。
 
 export struct HeaderView {
@@ -34,6 +34,9 @@ export struct TodoView {
     can-remove: bool,
     done-count: int,
     total: int,
+    md-bound: bool,
+    md-label: string,
+    md-error: string,
 }
 
 export struct ExpressionChip {
@@ -80,10 +83,36 @@ export struct MusicView {
     auto-follow: bool,
 }
 
+export struct ThemePresetOption {
+    key: string,
+    name: string,
+    swatch: color,
+    active: bool,
+}
+
+export struct ShortcutItem {
+    id: string,
+    name: string,
+    key-text: string,
+    is-global: bool,
+    can-clear: bool,
+    failed: bool,
+}
+
 export struct SettingsView {
     end-sound: bool,
     pet-scale: float,
     pet-scale-text: string,
+    pet-opacity: float,
+    pet-opacity-text: string,
+    console-opacity: float,
+    console-opacity-text: string,
+    custom-accent: string,
+    accent-error: bool,
+    shortcut-error: string,
+    font-index: int,
+    font-status: string,
+    font-failed: bool,
     locked: bool,
     hide-on-fullscreen: bool,
     autostart: bool,
@@ -107,6 +136,11 @@ export global Store {
     in property <[string]> devices;
     in property <SettingsView> settings;
     in property <[string]> characters;
+    in property <[ThemePresetOption]> theme-presets;
+    in property <[ShortcutItem]> shortcuts;
+    in property <[string]> fonts;
+    // 当前正在录制快捷键时置为 true，避免顶层窗口快捷键误触发。
+    in-out property <bool> recording-shortcut: false;
     // 0 无，1 确认暂停，2 确认离开自习，3 鼓励
     in property <int> dialog;
 
@@ -119,12 +153,16 @@ export global Store {
     callback dialog-confirm();
     callback dialog-cancel();
 
-    // 待办
+    // 待办 & 外接 Markdown
     callback todo-rename(string);
     callback todo-add();
     callback todo-remove(int);
     callback todo-set-text(int, string);
     callback todo-set-done(int, bool);
+    callback todo-pick-import-md();
+    callback todo-pick-export-md();
+    callback todo-reload-md();
+    callback todo-unbind-md();
 
     // 表情
     callback select-expression(string);
@@ -143,9 +181,21 @@ export global Store {
     callback set-show-bpm(bool);
     callback set-auto-follow(bool);
 
-    // 设置
+    // 设置：外观、透明度、字体、快捷键、通用
     callback set-end-sound(bool);
     callback set-pet-scale(float);
+    callback set-pet-opacity(float);
+    callback set-console-opacity(float);
+    callback set-theme(string);
+    callback set-custom-accent(string);
+    callback clear-custom-accent();
+    callback record-shortcut(string /* action id */, bool /* ctrl */, bool /* alt */, bool /* shift */, string /* text */);
+    callback clear-shortcut(string /* action id */);
+    callback reset-shortcuts();
+    callback console-key-pressed(bool /* ctrl */, bool /* alt */, bool /* shift */, string /* text */) -> bool;
+    callback select-font(int);
+    callback pick-custom-font();
+    callback reset-font();
     callback set-locked(bool);
     callback set-hide-on-fullscreen(bool);
     callback set-autostart(bool);

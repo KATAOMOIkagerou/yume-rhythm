@@ -1,36 +1,37 @@
 // 配色与尺寸。所有颜色只在这里定义，页面里不写颜色字面量。
+// 颜色属性为 in-out，由 Rust 侧根据 yume-core::model::theme 派生的调色板动态更新。
 
 export global Theme {
     in-out property <string> font-family: "Microsoft YaHei UI";
 
-    out property <color> bg: #f8f4f7;
-    out property <color> surface: #ffffff;
-    out property <color> surface-alt: #f5eef3;
-    out property <color> surface-hover: #f1e8ee;
-    out property <color> border: #ece1e8;
-    out property <color> divider: #f2eaef;
+    in-out property <color> bg: #f8f4f7;
+    in-out property <color> surface: #ffffff;
+    in-out property <color> surface-alt: #f5eef3;
+    in-out property <color> surface-hover: #f1e8ee;
+    in-out property <color> border: #ece1e8;
+    in-out property <color> divider: #f2eaef;
 
-    out property <color> text: #2d2431;
-    out property <color> text-secondary: #75687b;
-    out property <color> text-muted: #a99fae;
-    out property <color> text-on-accent: #ffffff;
+    in-out property <color> text: #2d2431;
+    in-out property <color> text-secondary: #75687b;
+    in-out property <color> text-muted: #a99fae;
+    in-out property <color> text-on-accent: #ffffff;
 
-    out property <color> accent: #d6558c;
-    out property <color> accent-hover: #c4467c;
-    out property <color> accent-pressed: #b03b6e;
-    out property <color> accent-soft: #fce8f1;
-    out property <color> accent-strong-text: #b3326a;
+    in-out property <color> accent: #d6558c;
+    in-out property <color> accent-hover: #c4467c;
+    in-out property <color> accent-pressed: #b03b6e;
+    in-out property <color> accent-soft: #fce8f1;
+    in-out property <color> accent-strong-text: #b3326a;
 
-    out property <color> violet: #8467e8;
-    out property <color> violet-soft: #efeafd;
-    out property <color> green: #2c9a69;
-    out property <color> green-soft: #e2f4eb;
-    out property <color> amber: #b97a0e;
-    out property <color> amber-soft: #fcf2da;
-    out property <color> red: #c94343;
-    out property <color> red-soft: #fce9e9;
+    in-out property <color> violet: #8467e8;
+    in-out property <color> violet-soft: #efeafd;
+    in-out property <color> green: #2c9a69;
+    in-out property <color> green-soft: #e2f4eb;
+    in-out property <color> amber: #b97a0e;
+    in-out property <color> amber-soft: #fcf2da;
+    in-out property <color> red: #c94343;
+    in-out property <color> red-soft: #fce9e9;
 
-    out property <color> scrim: #2d243166;
+    in-out property <color> scrim: #2d243166;
 
     out property <length> radius: 14px;
     out property <length> radius-small: 9px;

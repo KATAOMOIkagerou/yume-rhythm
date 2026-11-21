@@ -1,0 +1,222 @@
+// 设置页的外观模块：主题色、自定义强调色、控制台与桌宠透明度、界面字体。
+
+import { ComboBox, LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { ButtonKind, Card, Notice, PillButton } from "widgets.slint";
+import { RangeSlider } from "controls.slint";
+import { Store, ThemePresetOption } from "store.slint";
+
+component ThemeSwatchChip inherits Rectangle {
+    in property <ThemePresetOption> option;
+    callback clicked();
+
+    height: 30px;
+    horizontal-stretch: 1;
+    border-radius: Theme.radius-small;
+    background: root.option.active ? Theme.accent-soft
+        : ta.has-hover ? Theme.surface-hover : Theme.surface-alt;
+    border-width: 1px;
+    border-color: root.option.active ? Theme.accent : Theme.border;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 6px;
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: root.option.swatch;
+                border-width: 1px;
+                border-color: Theme.border;
+            }
+        }
+        Text {
+            text: root.option.name;
+            font-size: Theme.font-caption;
+            font-weight: root.option.active ? 600 : 400;
+            color: root.option.active ? Theme.accent-strong-text : Theme.text;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: MouseCursor.pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component ThemeCard inherits Card {
+    title: "主题色";
+
+    if Store.theme-presets.length >= 6: VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 6px;
+            for idx in [0, 1, 2]: ThemeSwatchChip {
+                option: Store.theme-presets[idx];
+                clicked => { Store.set-theme(Store.theme-presets[idx].key); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            for idx in [3, 4, 5]: ThemeSwatchChip {
+                option: Store.theme-presets[idx];
+                clicked => { Store.set-theme(Store.theme-presets[idx].key); }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        accent-input := LineEdit {
+            horizontal-stretch: 1;
+            text: Store.settings.custom-accent;
+            placeholder-text: "自定义强调色，如 #ff6699";
+            font-size: Theme.font-caption;
+            accepted(t) => { Store.set-custom-accent(t); }
+        }
+        PillButton {
+            kind: ButtonKind.secondary;
+            compact: true;
+            text: "应用";
+            clicked => { Store.set-custom-accent(accent-input.text); }
+        }
+        if Store.settings.custom-accent != "": PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "清除";
+            clicked => { Store.clear-custom-accent(); }
+        }
+    }
+
+    if Store.settings.accent-error: Notice {
+        text: "颜色格式不对，请输入 6 位十六进制色值（例如 #ff6699）";
+        tone: Theme.red;
+        tone-soft: Theme.red-soft;
+    }
+
+    property <string> model-accent: Store.settings.custom-accent;
+    changed model-accent => {
+        if (accent-input.text != root.model-accent) {
+            accent-input.text = root.model-accent;
+        }
+    }
+}
+
+export component OpacityCard inherits Card {
+    title: "透明度";
+
+    VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "控制台透明度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.console-opacity-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        console-slider := RangeSlider {
+            label: "控制台透明度";
+            minimum: 0.4;
+            maximum: 1.0;
+            step: 0.05;
+            value: Store.settings.console-opacity;
+            changed(v) => { Store.set-console-opacity(v); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "桌宠透明度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.pet-opacity-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        pet-slider := RangeSlider {
+            label: "桌宠透明度";
+            minimum: 0.3;
+            maximum: 1.0;
+            step: 0.05;
+            value: Store.settings.pet-opacity;
+            changed(v) => { Store.set-pet-opacity(v); }
+        }
+    }
+
+    property <float> model-console-opacity: Store.settings.console-opacity;
+    changed model-console-opacity => {
+        if (abs(console-slider.value - root.model-console-opacity) > 0.001) {
+            console-slider.value = root.model-console-opacity;
+        }
+    }
+
+    property <float> model-pet-opacity: Store.settings.pet-opacity;
+    changed model-pet-opacity => {
+        if (abs(pet-slider.value - root.model-pet-opacity) > 0.001) {
+            pet-slider.value = root.model-pet-opacity;
+        }
+    }
+}
+
+export component FontCard inherits Card {
+    title: "界面字体";
+
+    HorizontalLayout {
+        spacing: 6px;
+        picker := ComboBox {
+            horizontal-stretch: 1;
+            model: Store.fonts;
+            current-index: Store.settings.font-index;
+            selected => { Store.select-font(self.current-index); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        PillButton {
+            kind: ButtonKind.secondary;
+            compact: true;
+            text: "导入字体 (.ttf/.otf)";
+            clicked => { Store.pick-custom-font(); }
+        }
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "恢复默认";
+            clicked => { Store.reset-font(); }
+        }
+    }
+
+    if Store.settings.font-status != "": Notice {
+        text: Store.settings.font-status;
+        tone: Store.settings.font-failed ? Theme.red : Theme.text-secondary;
+        tone-soft: Store.settings.font-failed ? Theme.red-soft : Theme.surface-alt;
+    }
+
+    property <int> model-font-index: Store.settings.font-index;
+    changed model-font-index => {
+        if (picker.current-index != root.model-font-index) {
+            picker.current-index = root.model-font-index;
+        }
+    }
+}

@@ -5,7 +5,10 @@ use crate::model::events::{ActivityMode, EventContext, RandomEvent};
 use crate::model::expression::ExpressionMeta;
 use crate::model::pet::CharacterInfo;
 use crate::model::settings::PetPosition;
+use crate::model::shortcuts::ShortcutAction;
+use crate::model::theme::ThemePreset;
 use crate::model::timer::TimerMode;
+use crate::model::todo_md::TodoMdError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Command {
@@ -55,8 +58,31 @@ pub enum TodoCommand {
     Rename(String),
     Add,
     Remove(u32),
-    SetText { id: u32, text: String },
-    SetDone { id: u32, done: bool },
+    SetText {
+        id: u32,
+        text: String,
+    },
+    SetDone {
+        id: u32,
+        done: bool,
+    },
+    /// 打开系统文件选择框导入已有 Markdown 清单。
+    PickImportMd,
+    /// 打开系统保存框另存为外置 Markdown 清单并绑定。
+    PickExportMd,
+    /// 从当前绑定的外置 Markdown 重新读取内容。
+    ReloadMd,
+    /// 解绑外置 Markdown，切回内置清单（保留当前条目）。
+    UnbindMd,
+    // 以下由组装层回报。
+    MdLoaded {
+        path: String,
+        content: String,
+    },
+    MdBound {
+        path: String,
+    },
+    MdFailed(TodoMdError),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -98,6 +124,38 @@ pub enum SettingsCommand {
     /// 托盘菜单的勾选项。
     ToggleAutostart,
     SetHideOnFullscreen(bool),
+    /// 主题预设与可选自定义强调色 HEX。
+    SetTheme(ThemePreset),
+    SetCustomAccent(Option<String>),
+    /// 控制台与桌宠透明度。
+    SetConsoleOpacity(f32),
+    SetPetOpacity(f32),
+    /// 自定义快捷键。
+    SetShortcut {
+        action: ShortcutAction,
+        binding: String,
+    },
+    ClearShortcut(ShortcutAction),
+    ResetShortcuts,
+    /// 组装层回报全局热键注册失败列表。
+    GlobalHotkeysFailed(Vec<ShortcutAction>),
+    /// 控制台窗口收到按键事件（由 core 匹配控制台内快捷键）。
+    ConsoleKeyPressed {
+        ctrl: bool,
+        alt: bool,
+        shift: bool,
+        key: String,
+    },
+    /// 字体设置。
+    SetFontFamily(Option<String>),
+    PickCustomFont,
+    ResetFont,
+    FontsListed(Vec<String>),
+    CustomFontLoaded {
+        path: String,
+        family: String,
+    },
+    CustomFontFailed(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

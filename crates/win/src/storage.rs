@@ -3,15 +3,15 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub const APP_DIR: &str = "yume-rhythm";
+pub const APP_DIR: &str = "韵梦桌伴";
 
-/// `%APPDATA%\yume-rhythm`（漫游配置：设置、用户角色包）。
+/// `%APPDATA%\韵梦桌伴`（漫游配置：设置、用户角色包）。
 #[must_use]
 pub fn roaming_dir() -> Option<PathBuf> {
     std::env::var_os("APPDATA").map(|p| PathBuf::from(p).join(APP_DIR))
 }
 
-/// `%LOCALAPPDATA%\yume-rhythm`（本机数据：日志）。
+/// `%LOCALAPPDATA%\韵梦桌伴`（本机数据：日志）。
 #[must_use]
 pub fn local_dir() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join(APP_DIR))

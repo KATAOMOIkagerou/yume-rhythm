@@ -3,7 +3,12 @@
 //! 读取永不失败：整体损坏时用默认值，单个字段非法时只回退那个字段。
 
 use crate::model::events::{EventContext, EventSwitches, RandomEvent};
-use crate::model::settings::{PetPosition, Settings, clamp_pet_scale, clamp_random_interval};
+use crate::model::settings::{
+    PetPosition, Settings, clamp_console_opacity, clamp_pet_opacity, clamp_pet_scale,
+    clamp_random_interval,
+};
+use crate::model::shortcuts::Shortcuts;
+use crate::model::theme::{ThemePreset, normalize_hex_color};
 use crate::model::timer::{DEFAULT_MINUTES, TimerMode, clamp_minutes};
 use crate::model::todo::{TodoItem, TodoList};
 use serde::de::DeserializeOwned;
@@ -78,8 +83,43 @@ fn field<T: DeserializeOwned>(obj: &Value, key: &str) -> Option<T> {
         .and_then(|v| serde_json::from_value(v.clone()).ok())
 }
 
+fn read_shortcuts(v: Option<&Value>) -> Shortcuts {
+    let d = Shortcuts::default();
+    let Some(obj) = v else {
+        return d;
+    };
+    let mut s = Shortcuts {
+        global_toggle_console: field(obj, "global_toggle_console")
+            .unwrap_or(d.global_toggle_console),
+        global_toggle_locked: field(obj, "global_toggle_locked").unwrap_or(d.global_toggle_locked),
+        global_toggle_audio: field(obj, "global_toggle_audio").unwrap_or(d.global_toggle_audio),
+        local_audio_toggle: field(obj, "local_audio_toggle").unwrap_or(d.local_audio_toggle),
+        local_audio_stop: field(obj, "local_audio_stop").unwrap_or(d.local_audio_stop),
+        local_hide_console: field(obj, "local_hide_console").unwrap_or(d.local_hide_console),
+    };
+    s.sanitize();
+    s
+}
+
 fn read_settings(v: &Value) -> Settings {
     let d = Settings::default();
+    let shortcuts = read_shortcuts(v.get("shortcuts"));
+    let custom_accent = field::<Option<String>>(v, "custom_accent")
+        .flatten()
+        .and_then(|raw| normalize_hex_color(&raw));
+    let font_family = field::<Option<String>>(v, "font_family")
+        .flatten()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+    let custom_font_path = field::<Option<String>>(v, "custom_font_path")
+        .flatten()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+    let todo_md_path = field::<Option<String>>(v, "todo_md_path")
+        .flatten()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+
     Settings {
         end_sound: field(v, "end_sound").unwrap_or(d.end_sound),
         random_enabled: field(v, "random_enabled").unwrap_or(d.random_enabled),
@@ -95,6 +135,15 @@ fn read_settings(v: &Value) -> Settings {
         character: field::<String>(v, "character")
             .filter(|id| is_valid_character_id(id))
             .unwrap_or(d.character),
+        theme: field::<ThemePreset>(v, "theme").unwrap_or(d.theme),
+        custom_accent,
+        console_opacity: field::<f32>(v, "console_opacity")
+            .map_or(d.console_opacity, clamp_console_opacity),
+        pet_opacity: field::<f32>(v, "pet_opacity").map_or(d.pet_opacity, clamp_pet_opacity),
+        shortcuts,
+        font_family,
+        custom_font_path,
+        todo_md_path,
     }
 }
 
@@ -160,6 +209,15 @@ mod tests {
         let mut p = Persisted::default();
         p.settings.random_interval_s = 30;
         p.settings.pet_position = Some(PetPosition { x: -100, y: 20 });
+        p.settings.theme = ThemePreset::Night;
+        p.settings.custom_accent = Some("#4a90e2".into());
+        p.settings.console_opacity = 0.85;
+        p.settings.pet_opacity = 0.7;
+        p.settings.shortcuts.global_toggle_audio = "Ctrl+Alt+M".into();
+        p.settings.shortcuts.local_hide_console = "F9".into();
+        p.settings.font_family = Some("LXGW WenKai".into());
+        p.settings.custom_font_path = Some("C:/fonts/wenkai.ttf".into());
+        p.settings.todo_md_path = Some("D:/notes/todo.md".into());
         p.study.minutes = 45;
         p.todo.rename("今天");
         assert_eq!(Persisted::from_json(&p.to_json()), p);
@@ -175,7 +233,11 @@ mod tests {
     fn bad_fields_fall_back_individually() {
         let text = r#"{
             "settings": { "end_sound": "yes", "random_enabled": false, "random_interval_s": 1,
-                          "pet_scale": 99, "character": "../../evil" },
+                          "pet_scale": 99, "pet_opacity": 0.05, "console_opacity": 5.0,
+                          "theme": "unknown", "custom_accent": "not-a-color",
+                          "shortcuts": { "global_toggle_console": "Space", "local_hide_console": "F2" },
+                          "font_family": "   ", "custom_font_path": "",
+                          "todo_md_path": "  ", "character": "../../evil" },
             "study": { "minutes": 0 },
             "event_switches": { "music": { "doze": true, "love": false } },
             "todo": { "name": 3, "items": [ { "id": 1, "text": "背单词", "done": true }, 42 ] }
@@ -185,6 +247,15 @@ mod tests {
         assert!(!p.settings.random_enabled);
         assert_eq!(p.settings.random_interval_s, 5);
         assert!((p.settings.pet_scale - 2.0).abs() < f32::EPSILON);
+        assert!((p.settings.pet_opacity - 0.3).abs() < f32::EPSILON);
+        assert!((p.settings.console_opacity - 1.0).abs() < f32::EPSILON);
+        assert_eq!(p.settings.theme, ThemePreset::Sakura);
+        assert_eq!(p.settings.custom_accent, None);
+        assert_eq!(p.settings.shortcuts.global_toggle_console, "Ctrl+Alt+C");
+        assert_eq!(p.settings.shortcuts.local_hide_console, "F2");
+        assert_eq!(p.settings.font_family, None);
+        assert_eq!(p.settings.custom_font_path, None);
+        assert_eq!(p.settings.todo_md_path, None);
         assert_eq!(p.settings.character, "sakura");
         assert_eq!(p.study.minutes, 1);
         assert!(!p.event_switches.music.doze);

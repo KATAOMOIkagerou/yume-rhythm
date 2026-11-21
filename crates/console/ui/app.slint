@@ -61,7 +61,7 @@ component TabBar inherits Rectangle {
 export component ConsoleWindow inherits Window {
     in-out property <int> tab: 0;
 
-    title: "桌宠节奏师";
+    title: "yume-rhythm";
     icon: @image-url("icon.png");
     preferred-width: 400px;
     preferred-height: 680px;
@@ -72,24 +72,23 @@ export component ConsoleWindow inherits Window {
     default-font-size: Theme.font-body;
 
     init => { keys.focus(); }
-    // 换页时原来有焦点的控件被销毁，焦点交还给窗口，空格 / Q / H 才能继续用。
-    changed tab => { keys.focus(); }
+    // 换页时原来有焦点的控件被销毁，焦点交还给窗口，控制台内快捷键才能继续用。
+    changed tab => {
+        Store.recording-shortcut = false;
+        keys.focus();
+    }
 
     keys := FocusScope {
         key-pressed(event) => {
-            if (event.modifiers.control || event.modifiers.alt || event.modifiers.meta) {
+            if (Store.recording-shortcut || event.modifiers.meta) {
                 return reject;
             }
-            if (event.text == " ") {
-                Store.audio-toggle();
-                return accept;
-            }
-            if (event.text == "q" || event.text == "Q") {
-                Store.audio-stop();
-                return accept;
-            }
-            if (event.text == "h" || event.text == "H") {
-                Store.hide-console();
+            if (Store.console-key-pressed(
+                event.modifiers.control,
+                event.modifiers.alt,
+                event.modifiers.shift,
+                event.text
+            )) {
                 return accept;
             }
             reject
@@ -113,7 +112,7 @@ export component ConsoleWindow inherits Window {
                         overflow: elide;
                     }
                     Text {
-                        text: "桌宠节奏师";
+                        text: "韵梦桌伴";
                         font-size: Theme.font-caption;
                         color: Theme.text-muted;
                     }
@@ -144,15 +143,17 @@ export component ConsoleWindow inherits Window {
 
             Rectangle {
                 vertical-stretch: 1;
-                if root.tab == 0: FocusPage { }
-                if root.tab == 1: EmotionPage { }
-                if root.tab == 2: MusicPage { }
-                if root.tab == 3: SettingsPage { }
+                if root.tab == 0: FocusPage { width: 100%; height: 100%; }
+                if root.tab == 1: EmotionPage { width: 100%; height: 100%; }
+                if root.tab == 2: MusicPage { width: 100%; height: 100%; }
+                if root.tab == 3: SettingsPage { width: 100%; height: 100%; }
             }
         }
     }
 
     if Store.dialog != 0: DialogLayer {
         kind: Store.dialog;
+        width: 100%;
+        height: 100%;
     }
 }

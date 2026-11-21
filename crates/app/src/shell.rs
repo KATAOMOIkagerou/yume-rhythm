@@ -7,6 +7,7 @@ use yume_audio::{AudioEvent, ErrorKind};
 use yume_core::Command;
 use yume_core::command::{AudioCommand, PetCommand, SettingsCommand};
 use yume_core::model::audio::{AudioDevice, AudioError};
+use yume_core::model::shortcuts::{ShortcutAction, Shortcuts};
 use yume_win::{Hotkeys, Tray, TrayEvent, TrayItem};
 
 const ICON: &[u8] = include_bytes!("../assets/icon.png");
@@ -51,7 +52,7 @@ pub fn tray(to_main: ToMain) -> Option<Tray> {
             to_main(cmd);
         }
     };
-    match Tray::new(icon.rgba, icon.width, "桌宠节奏师", &entries, on_event) {
+    match Tray::new(icon.rgba, icon.width, "韵梦桌伴", &entries, on_event) {
         Ok(tray) => Some(tray),
         Err(e) => {
             log::warn!("托盘图标创建失败：{e}");
@@ -60,28 +61,54 @@ pub fn tray(to_main: ToMain) -> Option<Tray> {
     }
 }
 
-/// Ctrl+Alt+C 开关控制台，Ctrl+Alt+L 锁定 / 解锁。被占用时只记日志，托盘仍可用。
-pub fn hotkeys(to_main: ToMain) -> Option<Hotkeys> {
-    let bindings = [("console", "ctrl+alt+KeyC"), ("lock", "ctrl+alt+KeyL")];
+/// 按当前设置注册全局快捷键。被占用时只记日志并回报给界面，托盘仍可用。
+pub fn hotkeys(to_main: ToMain, shortcuts: &Shortcuts) -> (Option<Hotkeys>, Vec<ShortcutAction>) {
+    let owned = shortcuts.global_accelerators();
+    let refs: Vec<(&'static str, &str)> = owned.iter().map(|(id, a)| (*id, a.as_str())).collect();
     let on_press = move |id: &'static str| {
-        let cmd = match id {
-            "console" => Command::Pet(PetCommand::ToggleConsole),
-            _ => Command::Pet(PetCommand::ToggleLocked),
-        };
-        to_main(cmd);
-    };
-    match yume_win::register_hotkeys(&bindings, on_press) {
-        Ok((hotkeys, failed)) => {
-            for id in failed {
-                log::warn!("全局快捷键 {id} 注册失败，可能被其他程序占用");
+        let cmd = match ShortcutAction::from_id(id) {
+            Some(ShortcutAction::GlobalToggleConsole) => {
+                Some(Command::Pet(PetCommand::ToggleConsole))
             }
-            Some(hotkeys)
+            Some(ShortcutAction::GlobalToggleLocked) => {
+                Some(Command::Pet(PetCommand::ToggleLocked))
+            }
+            Some(ShortcutAction::GlobalToggleAudio) => Some(Command::Audio(AudioCommand::Toggle)),
+            _ => None,
+        };
+        if let Some(cmd) = cmd {
+            to_main(cmd);
+        }
+    };
+    match yume_win::register_hotkeys(&refs, on_press) {
+        Ok((hotkeys, failed)) => {
+            let actions = map_failed_hotkeys(&failed);
+            (Some(hotkeys), actions)
         }
         Err(e) => {
             log::warn!("全局快捷键不可用：{e}");
-            None
+            (None, Vec::new())
         }
     }
+}
+
+/// 热更新全局快捷键绑定，返回注册失败的动作列表。
+pub fn rebind_hotkeys(hotkeys: &mut Hotkeys, shortcuts: &Shortcuts) -> Vec<ShortcutAction> {
+    let owned = shortcuts.global_accelerators();
+    let refs: Vec<(&'static str, &str)> = owned.iter().map(|(id, a)| (*id, a.as_str())).collect();
+    let failed = hotkeys.rebind(&refs);
+    map_failed_hotkeys(&failed)
+}
+
+fn map_failed_hotkeys(failed: &[&'static str]) -> Vec<ShortcutAction> {
+    let mut actions = Vec::new();
+    for &id in failed {
+        log::warn!("全局快捷键 {id} 注册失败，可能被其他程序占用");
+        if let Some(action) = ShortcutAction::from_id(id) {
+            actions.push(action);
+        }
+    }
+    actions
 }
 
 /// 主线程定时器：计时推进与全屏检测。返回值要一直持有。

@@ -56,6 +56,7 @@ pub fn spawn(
                     locked: false,
                     visible: true,
                     scale: 1.0,
+                    opacity: 1.0,
                 },
                 music: false,
                 placed: false,
@@ -97,7 +98,7 @@ struct Pet {
 impl Pet {
     fn run(&mut self) -> anyhow::Result<()> {
         // 先放在屏幕外，第一帧画好、知道尺寸后再摆到位。
-        let mut window = PetWindow::create("桌宠节奏师", -32_000, -32_000)?;
+        let mut window = PetWindow::create("yume-rhythm", -32_000, -32_000)?;
         let timer = FrameTimer::new()?;
         let mut frame = Frame::default();
         let mut pacer = FramePacer::new(self.clock.now_ms());
@@ -161,6 +162,10 @@ impl Pet {
                     if props.visible != self.props.visible {
                         window.set_visible(props.visible);
                     }
+                    if (props.opacity - self.props.opacity).abs() > f32::EPSILON {
+                        let alpha = yume_core::model::settings::opacity_to_u8(props.opacity);
+                        window.set_opacity(alpha);
+                    }
                     self.props = props;
                 }
                 Ok(PetControl::Character(renderer)) => self.renderer = Some(renderer),
@@ -214,7 +219,7 @@ impl Pet {
                             "开始听歌"
                         },
                     ),
-                    item(MENU_LOCK, "锁定桌宠（Ctrl+Alt+L 解除）"),
+                    item(MENU_LOCK, "锁定桌宠"),
                     MenuItem::Separator,
                     item(MENU_QUIT, "退出"),
                 ];

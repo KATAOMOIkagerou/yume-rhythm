@@ -12,6 +12,8 @@ mod app;
 mod beat;
 mod characters;
 mod clock;
+#[cfg(windows)]
+mod io_tasks;
 mod logging;
 #[cfg(windows)]
 mod pet;
@@ -53,9 +55,9 @@ fn run() -> anyhow::Result<()> {
     let roaming = yume_win::storage::roaming_dir();
     let local = yume_win::storage::local_dir();
     logging::init(local.map(|d| d.join("logs")).as_deref());
-    log::info!("桌宠节奏师 v{} 启动", env!("CARGO_PKG_VERSION"));
+    log::info!("韵梦桌伴 v{} 启动", env!("CARGO_PKG_VERSION"));
 
-    let Some(_instance) = yume_win::acquire_single_instance("YumeRhythm.SingleInstance") else {
+    let Some(_instance) = yume_win::acquire_single_instance("YunMengZhuoBan.SingleInstance") else {
         log::info!("已有实例在运行，通知它显示控制台");
         yume_win::notify_existing_instance();
         return Ok(());
@@ -96,13 +98,15 @@ fn run() -> anyhow::Result<()> {
         AudioService::spawn(ring, move |event| to_main(shell::audio_command(event)))
     };
 
+    let initial_shortcuts = state.settings().shortcuts.clone();
+    let (hotkeys, failed_hotkeys) = shell::hotkeys(to_main.clone(), &initial_shortcuts);
     let links = app::Links {
         pet: pet_tx,
         beat: beat_tx,
         audio,
-        tray: shell::tray(to_main.clone()),
+        tray: shell::tray(to_main),
+        hotkeys,
     };
-    let _hotkeys = shell::hotkeys(to_main);
     let roots = characters::roots(roaming.as_deref());
     log::info!("角色目录：{roots:?}");
     app::install(app::App::new(
@@ -110,6 +114,11 @@ fn run() -> anyhow::Result<()> {
     ));
     let _timers = shell::timers();
 
+    if !failed_hotkeys.is_empty() {
+        app::dispatch(Command::Settings(
+            yume_core::command::SettingsCommand::GlobalHotkeysFailed(failed_hotkeys),
+        ));
+    }
     app::dispatch(Command::Startup);
     if first_run {
         app::dispatch(Command::Pet(PetCommand::ShowConsole));

@@ -1,0 +1,153 @@
+// 设置页的自定义快捷键卡片：支持点击录制按键、冲突与占用提示、恢复默认。
+
+import { Theme } from "theme.slint";
+import { Badge, ButtonKind, Card, Notice, PillButton } from "widgets.slint";
+import { Store, ShortcutItem } from "store.slint";
+
+component ShortcutRowView inherits HorizontalLayout {
+    in property <ShortcutItem> item;
+    in property <bool> recording;
+    callback start-record();
+    callback clear-clicked();
+
+    spacing: 8px;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 2px;
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: root.item.name;
+                font-size: Theme.font-body;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            if root.item.failed: Badge {
+                text: "被占用";
+                tone: Theme.amber;
+                tone-soft: Theme.amber-soft;
+            }
+        }
+        Text {
+            text: root.item.is-global ? "全局快捷键（需带修饰键）" : "控制台内快捷键";
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            spacing: 4px;
+            key-box := Rectangle {
+                min-width: 96px;
+                height: 26px;
+                border-radius: 7px;
+                background: root.recording ? Theme.accent-soft
+                    : ta.has-hover ? Theme.surface-hover : Theme.surface-alt;
+                border-width: 1px;
+                border-color: root.recording ? Theme.accent : Theme.border;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    Text {
+                        text: root.recording ? "请按键…" : root.item.key-text;
+                        font-size: Theme.font-caption;
+                        font-weight: root.recording ? 600 : 500;
+                        color: root.recording ? Theme.accent-strong-text : Theme.text;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                ta := TouchArea {
+                    mouse-cursor: MouseCursor.pointer;
+                    clicked => { root.start-record(); }
+                }
+            }
+            if root.item.can-clear: PillButton {
+                kind: ButtonKind.ghost;
+                compact: true;
+                text: "清空";
+                clicked => { root.clear-clicked(); }
+            }
+        }
+    }
+}
+
+export component ShortcutsCard inherits Card {
+    title: "快捷键";
+    hint: root.recording-id != "" ? "按 Esc 取消录制" : "点击按键盒即可录制";
+
+    property <string> recording-id: "";
+
+    capture := FocusScope {
+        height: 0px;
+        key-pressed(event) => {
+            if (root.recording-id == "") {
+                return reject;
+            }
+            if (event.text == Key.Escape) {
+                root.recording-id = "";
+                Store.recording-shortcut = false;
+                return accept;
+            }
+            // 忽略单独按下的修饰键（等待主键）。
+            if (event.text == "" || event.text == Key.Control || event.text == Key.Shift
+                || event.text == Key.Alt || event.text == Key.AltGr || event.text == Key.Meta) {
+                return accept;
+            }
+            Store.record-shortcut(
+                root.recording-id,
+                event.modifiers.control,
+                event.modifiers.alt,
+                event.modifiers.shift,
+                event.text
+            );
+            root.recording-id = "";
+            Store.recording-shortcut = false;
+            accept
+        }
+    }
+
+    for row in Store.shortcuts: ShortcutRowView {
+        item: row;
+        recording: root.recording-id == row.id;
+        start-record => {
+            if (root.recording-id == row.id) {
+                root.recording-id = "";
+                Store.recording-shortcut = false;
+            } else {
+                root.recording-id = row.id;
+                Store.recording-shortcut = true;
+                capture.focus();
+            }
+        }
+        clear-clicked => {
+            root.recording-id = "";
+            Store.recording-shortcut = false;
+            Store.clear-shortcut(row.id);
+        }
+    }
+
+    if Store.settings.shortcut-error != "": Notice {
+        text: Store.settings.shortcut-error;
+        tone: Theme.red;
+        tone-soft: Theme.red-soft;
+    }
+
+    HorizontalLayout {
+        alignment: end;
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "恢复默认快捷键";
+            clicked => {
+                root.recording-id = "";
+                Store.recording-shortcut = false;
+                Store.reset-shortcuts();
+            }
+        }
+    }
+}

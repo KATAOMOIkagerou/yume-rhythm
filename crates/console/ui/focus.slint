@@ -2,7 +2,7 @@
 
 import { LineEdit, SpinBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Card, Chip, IconButton, Meter, PillButton, ButtonKind, Segmented } from "widgets.slint";
+import { Card, Chip, IconButton, Meter, Notice, PillButton, ButtonKind, Segmented } from "widgets.slint";
 import { Check } from "controls.slint";
 import { Store, TodoRow } from "store.slint";
 
@@ -175,11 +175,52 @@ component TodoCard inherits Card {
             clicked => { Store.todo-add(); }
         }
         Text {
-            text: "修改会自动保存";
+            text: Store.todo.md-label;
             font-size: Theme.font-caption;
-            color: Theme.text-muted;
+            color: Store.todo.md-bound ? Theme.accent-strong-text : Theme.text-muted;
             vertical-alignment: center;
+            overflow: elide;
         }
+    }
+
+    Rectangle {
+        height: 1px;
+        background: Theme.divider;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "导入 MD";
+            clicked => { Store.todo-pick-import-md(); }
+        }
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "另存 MD";
+            clicked => { Store.todo-pick-export-md(); }
+        }
+        if Store.todo.md-bound: PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "重载";
+            clicked => { Store.todo-reload-md(); }
+        }
+        if Store.todo.md-bound: PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "解绑";
+            clicked => { Store.todo-unbind-md(); }
+        }
+    }
+
+    if Store.todo.md-error != "": Notice {
+        text: Store.todo.md-error;
+        tone: Theme.red;
+        tone-soft: Theme.red-soft;
     }
 
     // 用户输入会断开 text 的绑定；名称被规范化后在这里同步回来。

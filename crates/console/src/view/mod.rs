@@ -3,10 +3,19 @@
 //! 这里只做"怎么显示"：文案、格式、下标与 id 的对应。"能不能做"的判断调用 core 的方法，
 //! 不在这里重新实现。
 
-use yume_core::model::audio::{AudioError, AudioSource, AudioStatus};
+mod settings;
+#[cfg(test)]
+mod tests;
+
+pub use settings::{Settings, ShortcutItem, ThemePresetView};
+
+use yume_core::model::audio::{AudioSource, AudioStatus};
 use yume_core::model::events::{ActivityMode, EventContext, EventSwitches, RandomEvent};
 use yume_core::model::expression::ExpressionKind;
 use yume_core::model::pet::{CharacterStatus, Dialog};
+use yume_core::model::settings::DEFAULT_FONT_FAMILY;
+use yume_core::model::shortcuts::Shortcuts;
+use yume_core::model::theme::{ThemePalette, resolve_palette};
 use yume_core::model::timer::{TimerMode, TimerStatus};
 use yume_core::{AppState, WallMs};
 
@@ -25,10 +34,19 @@ pub struct View {
     pub devices: Vec<String>,
     pub settings: Settings,
     pub characters: Vec<String>,
+    pub theme_presets: Vec<ThemePresetView>,
+    pub shortcuts: Vec<ShortcutItem>,
+    pub fonts: Vec<String>,
+    pub palette: Option<ThemePalette>,
+    pub font_family: String,
     pub dialog: i32,
     /// 下拉框下标对应的设备 id。0 为系统默认（`None`）。
     pub device_ids: Vec<Option<String>>,
     pub character_ids: Vec<String>,
+    /// 字体下拉框下标对应的字体家族名。0 为默认字体（`None`）。
+    pub font_families: Vec<Option<String>>,
+    /// 当前快捷键配置，供窗口按键回调判断是否消耗本地按键事件。
+    pub shortcuts_config: Shortcuts,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -70,6 +88,9 @@ pub struct Todo {
     pub can_remove: bool,
     pub done_count: i32,
     pub total: i32,
+    pub md_bound: bool,
+    pub md_label: String,
+    pub md_error: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -136,20 +157,6 @@ pub struct Music {
     pub auto_follow: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Settings {
-    pub end_sound: bool,
-    pub pet_scale: f32,
-    pub pet_scale_text: String,
-    pub locked: bool,
-    pub hide_on_fullscreen: bool,
-    pub autostart: bool,
-    pub character_index: i32,
-    pub character_status: String,
-    pub character_failed: bool,
-    pub version: String,
-}
-
 #[must_use]
 pub fn project(state: &AppState, now: WallMs) -> View {
     let device_ids: Vec<Option<String>> = std::iter::once(None)
@@ -161,7 +168,18 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         .iter()
         .map(|c| c.id.clone())
         .collect();
+    let (fonts, font_families) = settings::font_options(state);
     let (base_expressions, accessory_expressions) = expression_chips(state);
+    let palette = resolve_palette(
+        state.settings().theme,
+        state.settings().custom_accent.as_deref(),
+    );
+    let font_family = state
+        .settings()
+        .font_family
+        .clone()
+        .unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_owned());
+
     View {
         header: header(state),
         focus: focus(state, now),
@@ -188,8 +206,13 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         devices: std::iter::once("系统默认输出设备".to_owned())
             .chain(state.audio().devices.iter().map(|d| d.name.clone()))
             .collect(),
-        settings: settings(state),
-        characters: characters(state),
+        settings: settings::project_settings(state, &font_families),
+        characters: settings::characters(state),
+        theme_presets: settings::theme_presets(state),
+        shortcuts: settings::shortcut_items(state),
+        fonts,
+        palette: Some(palette),
+        font_family,
         dialog: match state.dialog() {
             Dialog::None => 0,
             Dialog::ConfirmPause => 1,
@@ -198,6 +221,8 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         },
         device_ids,
         character_ids,
+        font_families,
+        shortcuts_config: state.settings().shortcuts.clone(),
     }
 }
 
@@ -293,11 +318,25 @@ pub fn clock_text(ms: i64, round_up: bool) -> String {
 fn todo(state: &AppState) -> Todo {
     let list = state.todo();
     let done = list.items().iter().filter(|i| i.done).count();
+    let md_path = state.settings().todo_md_path.as_deref();
+    let md_bound = md_path.is_some();
+    let md_label = match md_path {
+        Some(p) => format!("外接：{}（自动回写）", file_name(p)),
+        None => "修改会自动保存".to_owned(),
+    };
+    let md_error = state
+        .todo_md_error()
+        .map(settings::todo_md_error_text)
+        .unwrap_or_default()
+        .to_owned();
     Todo {
         name: list.name().to_owned(),
         can_remove: list.can_remove(),
         done_count: i32::try_from(done).unwrap_or(i32::MAX),
         total: i32::try_from(list.items().len()).unwrap_or(i32::MAX),
+        md_bound,
+        md_label,
+        md_error,
     }
 }
 
@@ -428,7 +467,11 @@ fn music(state: &AppState, now: WallMs, device_ids: &[Option<String>]) -> Music 
         bass: t.bass.clamp(0.0, 1.0),
         can_shift: audio.is_running() && t.beat_locked,
         silence_hint: audio.silence_hint(now),
-        error_text: audio.error.map(error_text).unwrap_or_default().into(),
+        error_text: audio
+            .error
+            .map(settings::audio_error_text)
+            .unwrap_or_default()
+            .into(),
         device_index: device_ids
             .iter()
             .position(|id| id == &settings.audio_device)
@@ -438,54 +481,6 @@ fn music(state: &AppState, now: WallMs, device_ids: &[Option<String>]) -> Music 
     }
 }
 
-fn error_text(e: AudioError) -> &'static str {
-    match e {
-        AudioError::DeviceUnavailable => "找不到这个输出设备，可能已经断开。换一个设备再试试。",
-        AudioError::UnsupportedFile => "不支持这种音频格式。可以试试 mp3、wav、ogg、flac 或 m4a。",
-        AudioError::FileUnreadable => "这个文件读不出来，可能已损坏或被占用。",
-        AudioError::Other => "音频出了点问题，请稍后再试。",
-    }
-}
-
-fn file_name(path: &str) -> &str {
+pub(crate) fn file_name(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
-
-fn settings(state: &AppState) -> Settings {
-    let s = state.settings();
-    let c = state.character();
-    let (character_status, character_failed) = match &c.status {
-        CharacterStatus::Loading => ("正在载入角色…".to_owned(), false),
-        CharacterStatus::Ready => (String::new(), false),
-        CharacterStatus::Failed(message) => (format!("角色载入失败：{message}"), true),
-    };
-    Settings {
-        end_sound: s.end_sound,
-        pet_scale: s.pet_scale,
-        pet_scale_text: format!("{:.0}%", s.pet_scale * 100.0),
-        locked: state.pet().locked,
-        hide_on_fullscreen: s.hide_on_fullscreen,
-        autostart: s.autostart,
-        character_index: c
-            .available
-            .iter()
-            .position(|i| i.id == s.character)
-            .and_then(|i| i32::try_from(i).ok())
-            .unwrap_or(-1),
-        character_status,
-        character_failed,
-        version: format!("v{}", env!("CARGO_PKG_VERSION")),
-    }
-}
-
-fn characters(state: &AppState) -> Vec<String> {
-    state
-        .character()
-        .available
-        .iter()
-        .map(|c| c.name.clone())
-        .collect()
-}
-
-#[cfg(test)]
-mod tests;

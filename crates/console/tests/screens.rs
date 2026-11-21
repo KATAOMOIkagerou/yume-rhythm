@@ -18,12 +18,13 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use yume_console::Console;
 use yume_core::command::{
-    AudioCommand, CharacterCommand, ExpressionCommand, StudyCommand, TodoCommand,
+    AudioCommand, CharacterCommand, ExpressionCommand, SettingsCommand, StudyCommand, TodoCommand,
 };
 use yume_core::model::audio::{AudioDevice, AudioError, Telemetry};
 use yume_core::model::events::RandomEvent;
 use yume_core::model::expression::{ExpressionKind, ExpressionMeta};
 use yume_core::model::pet::CharacterInfo;
+use yume_core::model::theme::ThemePreset;
 use yume_core::{AppState, Command, Ctx, SplitMix64, WallMs, update};
 
 const SCALE: f32 = 1.5;
@@ -209,4 +210,9 @@ fn render_every_page() {
     shoot("music_error", &w, 2);
 
     shoot("settings", &w, 3);
+
+    w.send(Command::Settings(SettingsCommand::SetTheme(
+        ThemePreset::Night,
+    )));
+    shoot("settings_night", &w, 3);
 }

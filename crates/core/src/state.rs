@@ -5,8 +5,10 @@ use crate::model::events::{ActivityMode, EventSwitches};
 use crate::model::expression::{Expressions, Situation};
 use crate::model::pet::{CharacterState, Dialog, PetState};
 use crate::model::settings::Settings;
+use crate::model::shortcuts::{ShortcutAction, ShortcutError};
 use crate::model::timer::StudyTimer;
 use crate::model::todo::TodoList;
+use crate::model::todo_md::{TodoMdDoc, TodoMdError};
 use crate::persist::{Persisted, StudyPrefs};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -18,6 +20,14 @@ pub struct AppState {
     pub(crate) switches: EventSwitches,
     pub(crate) expressions: Expressions,
     pub(crate) todo: TodoList,
+    pub(crate) todo_md_doc: Option<TodoMdDoc>,
+    pub(crate) todo_md_error: Option<TodoMdError>,
+    pub(crate) todo_md_dirty_seq: u64,
+    pub(crate) accent_error: bool,
+    pub(crate) shortcut_error: Option<ShortcutError>,
+    pub(crate) global_hotkeys_failed: Vec<ShortcutAction>,
+    pub(crate) available_fonts: Vec<String>,
+    pub(crate) font_error: Option<String>,
     pub(crate) audio: AudioState,
     pub(crate) pet: PetState,
     pub(crate) character: CharacterState,
@@ -48,6 +58,14 @@ impl AppState {
             switches: event_switches,
             expressions: Expressions::default(),
             todo,
+            todo_md_doc: None,
+            todo_md_error: None,
+            todo_md_dirty_seq: 0,
+            accent_error: false,
+            shortcut_error: None,
+            global_hotkeys_failed: Vec::new(),
+            available_fonts: Vec::new(),
+            font_error: None,
             audio: AudioState::default(),
             pet: PetState::default(),
             character: CharacterState::default(),
@@ -102,6 +120,46 @@ impl AppState {
     #[must_use]
     pub fn todo(&self) -> &TodoList {
         &self.todo
+    }
+
+    #[must_use]
+    pub fn todo_md_doc(&self) -> Option<&TodoMdDoc> {
+        self.todo_md_doc.as_ref()
+    }
+
+    #[must_use]
+    pub fn todo_md_error(&self) -> Option<TodoMdError> {
+        self.todo_md_error
+    }
+
+    #[must_use]
+    pub fn todo_md_dirty_seq(&self) -> u64 {
+        self.todo_md_dirty_seq
+    }
+
+    #[must_use]
+    pub fn accent_error(&self) -> bool {
+        self.accent_error
+    }
+
+    #[must_use]
+    pub fn shortcut_error(&self) -> Option<&ShortcutError> {
+        self.shortcut_error.as_ref()
+    }
+
+    #[must_use]
+    pub fn global_hotkeys_failed(&self) -> &[ShortcutAction] {
+        &self.global_hotkeys_failed
+    }
+
+    #[must_use]
+    pub fn available_fonts(&self) -> &[String] {
+        &self.available_fonts
+    }
+
+    #[must_use]
+    pub fn font_error(&self) -> Option<&str> {
+        self.font_error.as_deref()
     }
 
     #[must_use]

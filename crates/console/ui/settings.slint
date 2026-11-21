@@ -1,16 +1,18 @@
-// 「设置」页：桌宠、角色、通用、快捷键、关于。
+// 「设置」页：外观、透明度、字体、桌宠、角色、通用、快捷键、关于。
 
 import { AboutSlint, ComboBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { ButtonKind, Card, Notice, PillButton, SettingRow } from "widgets.slint";
 import { RangeSlider, Toggle } from "controls.slint";
 import { Store } from "store.slint";
+import { FontCard, OpacityCard, ThemeCard } from "appearance.slint";
+import { ShortcutsCard } from "shortcuts.slint";
 
 component ScaleRow inherits VerticalLayout {
-    spacing: 4px;
+    spacing: 6px;
     HorizontalLayout {
         Text {
-            text: "大小";
+            text: "桌宠大小";
             font-size: Theme.font-body;
             color: Theme.text;
             horizontal-stretch: 1;
@@ -18,7 +20,8 @@ component ScaleRow inherits VerticalLayout {
         Text {
             text: Store.settings.pet-scale-text;
             font-size: Theme.font-body;
-            color: Theme.text-secondary;
+            font-weight: 500;
+            color: Theme.accent-strong-text;
         }
     }
     scale := RangeSlider {
@@ -68,35 +71,6 @@ component CharacterCard inherits Card {
     }
 }
 
-component Shortcut inherits HorizontalLayout {
-    in property <string> keys;
-    in property <string> action;
-    spacing: 10px;
-    Rectangle {
-        min-width: k.preferred-width + 14px;
-        height: 22px;
-        horizontal-stretch: 0;
-        border-radius: 6px;
-        background: Theme.surface-alt;
-        border-width: 1px;
-        border-color: Theme.border;
-        k := Text {
-            text: root.keys;
-            font-size: Theme.font-caption;
-            color: Theme.text-secondary;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
-    }
-    Text {
-        text: root.action;
-        font-size: Theme.font-body;
-        color: Theme.text;
-        vertical-alignment: center;
-        horizontal-stretch: 1;
-    }
-}
-
 export component SettingsPage inherits ScrollView {
     content-width: self.visible-width;
     VerticalLayout {
@@ -104,12 +78,16 @@ export component SettingsPage inherits ScrollView {
         spacing: Theme.gap;
         alignment: start;
 
+        ThemeCard { }
+        OpacityCard { }
+        FontCard { }
+
         Card {
             title: "桌宠";
             ScaleRow { }
             SettingRow {
                 title: "锁定桌宠";
-                description: "锁定后鼠标会穿过桌宠。可在托盘菜单或按 Ctrl+Alt+L 解除";
+                description: "锁定后鼠标会穿过桌宠。可在托盘菜单或按全局锁定快捷键解除";
                 Toggle {
                     label: "锁定桌宠";
                     checked: Store.settings.locked;
@@ -149,20 +127,13 @@ export component SettingsPage inherits ScrollView {
             }
         }
 
-        Card {
-            title: "快捷键";
-            Shortcut { keys: "Ctrl+Alt+C"; action: "打开控制台"; }
-            Shortcut { keys: "Ctrl+Alt+L"; action: "锁定 / 解除锁定桌宠"; }
-            Shortcut { keys: "空格"; action: "开始 / 停止监听音乐（控制台内）"; }
-            Shortcut { keys: "Q"; action: "停止监听音乐（控制台内）"; }
-            Shortcut { keys: "H"; action: "隐藏控制台（控制台内）"; }
-        }
+        ShortcutsCard { }
 
         Card {
             title: "关于";
             hint: Store.settings.version;
             Text {
-                text: "桌宠节奏师 · MIT 许可";
+                text: "韵梦桌伴 · MIT 许可";
                 font-size: Theme.font-body;
                 color: Theme.text-secondary;
             }
@@ -179,7 +150,7 @@ export component SettingsPage inherits ScrollView {
             padding-bottom: 8px;
             PillButton {
                 kind: ButtonKind.danger;
-                text: "退出桌宠节奏师";
+                text: "退出韵梦桌伴";
                 clicked => { Store.quit(); }
             }
         }

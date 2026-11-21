@@ -2,7 +2,7 @@
 
 use crate::pet_window::ACTIVATE_MESSAGE;
 use windows::Win32::Foundation::{
-    ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HWND, LPARAM, POINT, RECT, WPARAM,
+    COLORREF, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HWND, LPARAM, POINT, RECT, WPARAM,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO,
@@ -87,6 +87,26 @@ pub fn bring_to_front(hwnd: isize) {
         let flags = wm::SWP_NOMOVE | wm::SWP_NOSIZE | wm::SWP_SHOWWINDOW;
         let _ = wm::SetWindowPos(hwnd, Some(wm::HWND_TOP), 0, 0, 0, 0, flags);
         let _ = wm::SetForegroundWindow(hwnd);
+    }
+}
+
+/// 设置任意原生窗口的整体透明度（0–255）。255 时清除分层样式避免额外合成开销。
+pub fn set_window_opacity(hwnd: isize, alpha: u8) {
+    let hwnd = HWND(hwnd as *mut core::ffi::c_void);
+    // SAFETY: 句柄由调用方提供；无效句柄时 Win32 调用安全返回错误，不访问内存。
+    unsafe {
+        let ex = wm::GetWindowLongPtrW(hwnd, wm::GWL_EXSTYLE);
+        let layered = wm::WS_EX_LAYERED.0 as isize;
+        if alpha == 255 {
+            if ex & layered != 0 {
+                wm::SetWindowLongPtrW(hwnd, wm::GWL_EXSTYLE, ex & !layered);
+            }
+            return;
+        }
+        if ex & layered == 0 {
+            wm::SetWindowLongPtrW(hwnd, wm::GWL_EXSTYLE, ex | layered);
+        }
+        let _ = wm::SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, wm::LWA_ALPHA);
     }
 }
 

@@ -1,5 +1,7 @@
 //! 全局设置：默认值与取值范围集中在这里（功能清单第 11 节，以及重写新增项）。
 
+use crate::model::shortcuts::Shortcuts;
+use crate::model::theme::ThemePreset;
 use serde::{Deserialize, Serialize};
 
 pub const RANDOM_INTERVAL_MIN_S: u32 = 5;
@@ -7,7 +9,11 @@ pub const RANDOM_INTERVAL_MAX_S: u32 = 86_400;
 pub const RANDOM_INTERVAL_DEFAULT_S: u32 = 120;
 pub const PET_SCALE_MIN: f32 = 0.5;
 pub const PET_SCALE_MAX: f32 = 2.0;
+pub const CONSOLE_OPACITY_MIN: f32 = 0.4;
+pub const PET_OPACITY_MIN: f32 = 0.3;
+pub const OPACITY_MAX: f32 = 1.0;
 pub const DEFAULT_CHARACTER: &str = "sakura";
+pub const DEFAULT_FONT_FAMILY: &str = "Microsoft YaHei UI";
 
 /// 桌宠窗口位置，虚拟桌面物理像素。启动时若不在任何显示器上，由窗口层拉回可见区域。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +44,22 @@ pub struct Settings {
     pub hide_on_fullscreen: bool,
     /// 当前角色包 id。
     pub character: String,
+    /// 控制台主题预设。
+    pub theme: ThemePreset,
+    /// 可选自定义强调色（`#rrggbb`）。
+    pub custom_accent: Option<String>,
+    /// 控制台窗口透明度，0.4–1.0。
+    pub console_opacity: f32,
+    /// 桌宠窗口透明度，0.3–1.0。
+    pub pet_opacity: f32,
+    /// 自定义快捷键。
+    pub shortcuts: Shortcuts,
+    /// 界面字体家族名；`None` 表示默认（微软雅黑 UI）。
+    pub font_family: Option<String>,
+    /// 导入的本地 `.ttf`/`.otf` 字体文件路径（重启时自动加载）。
+    pub custom_font_path: Option<String>,
+    /// 外接 Markdown 待办清单文件路径；`None` 表示内置清单。
+    pub todo_md_path: Option<String>,
 }
 
 impl Default for Settings {
@@ -54,6 +76,14 @@ impl Default for Settings {
             autostart: false,
             hide_on_fullscreen: true,
             character: DEFAULT_CHARACTER.into(),
+            theme: ThemePreset::default(),
+            custom_accent: None,
+            console_opacity: OPACITY_MAX,
+            pet_opacity: OPACITY_MAX,
+            shortcuts: Shortcuts::default(),
+            font_family: None,
+            custom_font_path: None,
+            todo_md_path: None,
         }
     }
 }
@@ -76,6 +106,44 @@ pub fn clamp_pet_scale(scale: f32) -> f32 {
     }
     let stepped = (scale * 20.0).round() / 20.0;
     stepped.clamp(PET_SCALE_MIN, PET_SCALE_MAX)
+}
+
+/// 规整控制台透明度到 0.4–1.0，按 5% 取整。
+#[must_use]
+pub fn clamp_console_opacity(opacity: f32) -> f32 {
+    clamp_opacity(opacity, CONSOLE_OPACITY_MIN)
+}
+
+/// 规整桌宠透明度到 0.3–1.0，按 5% 取整。
+#[must_use]
+pub fn clamp_pet_opacity(opacity: f32) -> f32 {
+    clamp_opacity(opacity, PET_OPACITY_MIN)
+}
+
+fn clamp_opacity(opacity: f32, min: f32) -> f32 {
+    if !opacity.is_finite() {
+        return OPACITY_MAX;
+    }
+    let stepped = (opacity * 20.0).round() / 20.0;
+    stepped.clamp(min, OPACITY_MAX)
+}
+
+/// 将 0.0–1.0 的透明度映射为 Win32 0–255 字节值。
+#[must_use]
+pub fn opacity_to_u8(opacity: f32) -> u8 {
+    let clamped = if opacity.is_finite() {
+        opacity.clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "已钳位到 0..=255"
+    )]
+    {
+        (clamped * 255.0).round() as u8
+    }
 }
 
 #[cfg(test)]

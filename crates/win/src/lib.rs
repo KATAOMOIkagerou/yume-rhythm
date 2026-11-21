@@ -5,6 +5,8 @@
 pub mod storage;
 
 #[cfg(windows)]
+mod dialog;
+#[cfg(windows)]
 mod hotkeys;
 #[cfg(windows)]
 mod menu;
@@ -20,6 +22,8 @@ mod system;
 mod tray;
 
 #[cfg(windows)]
+pub use dialog::{pick_open_file, pick_save_file};
+#[cfg(windows)]
 pub use hotkeys::{Hotkeys, register as register_hotkeys};
 #[cfg(windows)]
 pub use msgloop::{FrameTimer, post_quit, pump_messages};
@@ -29,7 +33,7 @@ pub use pet_window::{PetEvent, PetWindow};
 pub use system::{
     InstanceGuard, acquire_single_instance, bring_to_front, enable_per_monitor_dpi,
     fullscreen_app_active, notify_existing_instance, open_sound_settings, place_on_screen,
-    set_autostart,
+    set_autostart, set_window_opacity,
 };
 #[cfg(windows)]
 pub use tray::{Tray, TrayEvent, TrayItem};

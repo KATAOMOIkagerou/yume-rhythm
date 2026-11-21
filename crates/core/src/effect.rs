@@ -24,6 +24,22 @@ pub enum Effect {
     },
     /// 打开 Windows 声音设置。
     OpenSoundSettings,
+    /// 弹出文件选择框导入外置 Markdown 待办清单。
+    PickTodoMdImport,
+    /// 弹出文件保存框新建并绑定外置 Markdown 待办清单。
+    PickTodoMdExport,
+    /// 从磁盘读取指定外置 Markdown 待办清单。
+    LoadTodoMd {
+        path: String,
+    },
+    /// 弹出文件选择框导入 `.ttf`/`.otf` 字体文件。
+    PickFontFile,
+    /// 加载并注册本地自定义字体文件。
+    LoadCustomFont {
+        path: String,
+    },
+    /// 枚举系统已安装字体。
+    ListFonts,
     /// 把控制台窗口带到最前面。显示控制台的命令都会附带它：窗口已经可见但被挡住时也要能看到。
     FocusConsole,
     Quit,

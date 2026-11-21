@@ -1,9 +1,12 @@
 use super::*;
 use yume_core::command::{
-    AudioCommand, CharacterCommand, ExpressionCommand, StudyCommand, TodoCommand,
+    AudioCommand, CharacterCommand, ExpressionCommand, SettingsCommand, StudyCommand, TodoCommand,
 };
 use yume_core::model::audio::{AudioDevice, Telemetry};
 use yume_core::model::expression::{ExpressionMeta, NEUTRAL};
+use yume_core::model::shortcuts::ShortcutAction;
+use yume_core::model::theme::ThemePreset;
+use yume_core::model::todo_md::TodoMdError;
 use yume_core::{Command, Ctx, SplitMix64, update};
 
 struct World {
@@ -191,4 +194,40 @@ fn todo_counts() {
     let v = w.view();
     assert_eq!((v.todo.done_count, v.todo.total), (1, 3));
     assert!(v.todo.can_remove);
+}
+
+#[test]
+fn appearance_shortcuts_fonts_and_md_project_cleanly() {
+    let mut w = World::new();
+    w.send(Command::Settings(SettingsCommand::SetTheme(
+        ThemePreset::Night,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetPetOpacity(0.6)));
+    w.send(Command::Settings(SettingsCommand::SetConsoleOpacity(0.85)));
+    w.send(Command::Settings(SettingsCommand::FontsListed(vec![
+        "微软雅黑".into(),
+        "Consolas".into(),
+    ])));
+    w.send(Command::Settings(SettingsCommand::SetFontFamily(Some(
+        "Consolas".into(),
+    ))));
+    w.send(Command::Settings(SettingsCommand::GlobalHotkeysFailed(
+        vec![ShortcutAction::GlobalToggleConsole],
+    )));
+    w.send(Command::Todo(TodoCommand::MdLoaded {
+        path: "D:/notes/plan.md".into(),
+        content: "# 周计划\n- [ ] 写测试\n".into(),
+    }));
+    w.send(Command::Todo(TodoCommand::MdFailed(TodoMdError::NotFound)));
+
+    let v = w.view();
+    assert!(v.theme_presets.iter().any(|p| p.key == "night" && p.active));
+    assert_eq!(v.settings.pet_opacity_text, "60%");
+    assert_eq!(v.settings.console_opacity_text, "85%");
+    assert_eq!(v.settings.font_index, 2);
+    assert_eq!(v.font_family, "Consolas");
+    assert!(v.shortcuts[0].failed);
+    assert!(v.todo.md_bound);
+    assert!(v.todo.md_label.contains("plan.md"));
+    assert!(!v.todo.md_error.is_empty());
 }
