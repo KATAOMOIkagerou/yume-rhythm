@@ -1,50 +1,67 @@
 //! 表情：手动选择、随机表情调度、生效规则（功能清单第 6、7 节）。
 //!
-//! 表情的图片资源属于角色包，core 只关心元数据（id、类型、事件、时长、是否参与随机）。
+//! 表情的图片资源属于角色包或用户自定义表情目录，core 只关心元数据与文件引用。
 
-use super::events::{ActivityMode, EventSwitches, RandomEvent};
+use super::events::{ActivityMode, RandomEvent};
+use super::expr_rules::Conditions;
 use crate::clock::{Random, WallMs};
 
 /// 必须存在的自然表情。再次点击当前表情会回到它。
 pub const NEUTRAL: &str = "neutral";
 
-/// 基础表情替换眼和嘴；附加表情在基础表情上叠加（可替换眼嘴并加特效）。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// 一级表情替换眼和嘴；二级表情在一级表情上叠加（可替换眼嘴并加特效）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ExpressionKind {
+    #[default]
     Base,
     Accessory,
 }
 
-/// 表情元数据，由角色包加载后提供。
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// 表情绑定的资源文件名（相对各自目录；自定义表情在加载后带 `custom/` 前缀）。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExpressionAssets {
+    pub eyes: Option<String>,
+    pub mouth: Option<String>,
+    pub overlay: Option<String>,
+}
+
+/// 表情元数据，由角色包加载并经条件规则解析后提供。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ExpressionMeta {
     pub id: String,
     pub name: String,
     pub kind: ExpressionKind,
-    /// 关联的随机事件。有事件的表情受开关矩阵约束。
+    /// 关联的内置随机事件（如 `Doze` 锁定听歌不可用）。
     pub event: Option<RandomEvent>,
     pub duration_ms: u32,
     /// 是否参与随机表情。
     pub random: bool,
+    /// 三个场景下是否允许随机出现。
+    pub conditions: Conditions,
+    /// 是否为用户自定义表情。
+    pub custom: bool,
+    /// 资源文件名（编辑自定义表情时展示）。
+    pub assets: ExpressionAssets,
 }
 
 /// 判断表情是否可用时需要的外部条件。
 #[derive(Clone, Copy, Debug)]
-pub struct Situation<'a> {
+pub struct Situation {
     pub activity: ActivityMode,
     pub music: bool,
-    pub switches: &'a EventSwitches,
 }
 
-impl Situation<'_> {
-    fn allows(&self, meta: &ExpressionMeta) -> bool {
-        meta.event
-            .is_none_or(|e| self.switches.is_allowed(e, self.activity, self.music))
+impl Situation {
+    fn allows(self, meta: &ExpressionMeta) -> bool {
+        if self.music && meta.event == Some(RandomEvent::Doze) {
+            return false;
+        }
+        meta.conditions.allows(self.activity, self.music)
     }
 
     /// 手动选择的表情此刻能否显示：播放音乐时不打瞌睡。
     #[must_use]
-    pub fn shows_manual(&self, meta: &ExpressionMeta) -> bool {
+    pub fn shows_manual(self, meta: &ExpressionMeta) -> bool {
         !(self.music && meta.event == Some(RandomEvent::Doze))
     }
 }
@@ -68,7 +85,7 @@ pub struct Expressions {
     catalog: Vec<ExpressionMeta>,
     /// 手动选择的表情。
     selected: String,
-    /// 最近一次选择的基础表情。附加表情叠加在它上面。
+    /// 最近一次选择的一级表情。二级表情叠加在它上面。
     base: String,
     random: Option<ActiveRandom>,
     next_random_at: Option<WallMs>,
@@ -99,7 +116,7 @@ impl Expressions {
         self.catalog.iter().find(|m| m.id == id)
     }
 
-    /// 替换表情目录（换角色或重载素材后）。已选表情不存在时回到自然表情。
+    /// 替换表情目录（换角色、重载素材或更新条件后）。已选表情不存在时回到自然表情。
     pub fn set_catalog(&mut self, catalog: Vec<ExpressionMeta>) {
         self.catalog = catalog;
         if self.find(&self.selected).is_none() {
@@ -116,7 +133,7 @@ impl Expressions {
 
     /// 当前参与随机的表情。
     #[must_use]
-    pub fn random_pool(&self, situation: &Situation<'_>) -> Vec<&ExpressionMeta> {
+    pub fn random_pool(&self, situation: &Situation) -> Vec<&ExpressionMeta> {
         self.catalog
             .iter()
             .filter(|m| m.random && situation.allows(m))
@@ -126,7 +143,7 @@ impl Expressions {
     /// 当前实际显示的表情：随机表情优先，否则为手动选择。
     /// 音乐播放中手动选择的"打瞌睡"不显示。
     #[must_use]
-    pub fn effective(&self, situation: &Situation<'_>) -> Option<&ExpressionMeta> {
+    pub fn effective(&self, situation: &Situation) -> Option<&ExpressionMeta> {
         let random = self.random.as_ref().and_then(|r| self.find(&r.id));
         if let Some(meta) = random.filter(|m| situation.allows(m)) {
             return Some(meta);
@@ -137,16 +154,16 @@ impl Expressions {
 
     /// 当前显示的是随机表情（而不是手动选择的）。
     #[must_use]
-    pub fn showing_random(&self, situation: &Situation<'_>) -> bool {
+    pub fn showing_random(&self, situation: &Situation) -> bool {
         self.random
             .as_ref()
             .and_then(|r| self.find(&r.id))
             .is_some_and(|m| situation.allows(m))
     }
 
-    /// 当前的基础表情：生效表情本身是基础表情时用它，否则用最近选择的基础表情。
+    /// 当前的一级表情：生效表情本身是一级表情时用它，否则用最近选择的一级表情。
     #[must_use]
-    pub fn effective_base(&self, situation: &Situation<'_>) -> Option<&ExpressionMeta> {
+    pub fn effective_base(&self, situation: &Situation) -> Option<&ExpressionMeta> {
         match self.effective(situation) {
             Some(meta) if meta.kind == ExpressionKind::Base => Some(meta),
             _ => self.find(&self.base),
@@ -154,7 +171,7 @@ impl Expressions {
     }
 
     /// 手动选择表情。再次选择当前生效的表情会回到自然表情。手动选择会打断随机表情。
-    pub fn select(&mut self, id: &str, situation: &Situation<'_>) {
+    pub fn select(&mut self, id: &str, situation: &Situation) {
         if self.find(id).is_none() {
             return;
         }
@@ -175,7 +192,7 @@ impl Expressions {
         &mut self,
         enabled: bool,
         interval_s: u32,
-        situation: &Situation<'_>,
+        situation: &Situation,
         now: WallMs,
     ) {
         let pool = self
@@ -197,7 +214,7 @@ impl Expressions {
     }
 
     /// 推进随机表情：到期结束，到点抽取下一个。
-    pub fn tick(&mut self, situation: &Situation<'_>, now: WallMs, rng: &mut dyn Random) {
+    pub fn tick(&mut self, situation: &Situation, now: WallMs, rng: &mut dyn Random) {
         if self.random.as_ref().is_some_and(|r| now >= r.until) {
             self.random = None;
         }
@@ -233,7 +250,12 @@ mod tests {
     use super::*;
     use crate::clock::SplitMix64;
 
-    fn meta(id: &str, kind: ExpressionKind, event: Option<RandomEvent>) -> ExpressionMeta {
+    fn meta(
+        id: &str,
+        kind: ExpressionKind,
+        event: Option<RandomEvent>,
+        conditions: Conditions,
+    ) -> ExpressionMeta {
         ExpressionMeta {
             id: id.into(),
             name: id.into(),
@@ -241,6 +263,8 @@ mod tests {
             event,
             duration_ms: 3200,
             random: id != NEUTRAL,
+            conditions,
+            ..Default::default()
         }
     }
 
@@ -248,26 +272,38 @@ mod tests {
         use ExpressionKind::{Accessory, Base};
         let mut e = Expressions::default();
         e.set_catalog(vec![
-            meta(NEUTRAL, Base, None),
-            meta("happy", Base, None),
-            meta("doze", Accessory, Some(RandomEvent::Doze)),
-            meta("think", Accessory, Some(RandomEvent::Think)),
+            meta(NEUTRAL, Base, None, Conditions::ALL_ON),
+            meta("happy", Base, None, Conditions::ALL_ON),
+            meta(
+                "doze",
+                Accessory,
+                Some(RandomEvent::Doze),
+                Conditions {
+                    chill: true,
+                    study: false,
+                    music: false,
+                },
+            ),
+            meta(
+                "think",
+                Accessory,
+                Some(RandomEvent::Think),
+                Conditions::ALL_ON,
+            ),
         ]);
         e
     }
 
-    fn situation(switches: &EventSwitches, music: bool) -> Situation<'_> {
+    fn situation(music: bool) -> Situation {
         Situation {
             activity: ActivityMode::Chill,
             music,
-            switches,
         }
     }
 
     #[test]
     fn reselecting_current_returns_to_neutral() {
-        let sw = EventSwitches::default();
-        let s = situation(&sw, false);
+        let s = situation(false);
         let mut e = sample();
         e.select("happy", &s);
         assert_eq!(e.effective(&s).map(|m| m.id.as_str()), Some("happy"));
@@ -277,8 +313,7 @@ mod tests {
 
     #[test]
     fn accessory_keeps_previous_base() {
-        let sw = EventSwitches::default();
-        let s = situation(&sw, false);
+        let s = situation(false);
         let mut e = sample();
         e.select("happy", &s);
         e.select("think", &s);
@@ -288,17 +323,15 @@ mod tests {
 
     #[test]
     fn manual_doze_is_hidden_while_music_plays() {
-        let sw = EventSwitches::default();
         let mut e = sample();
-        e.select("doze", &situation(&sw, false));
-        assert_eq!(e.effective(&situation(&sw, true)), None);
-        assert!(e.effective(&situation(&sw, false)).is_some());
+        e.select("doze", &situation(false));
+        assert_eq!(e.effective(&situation(true)), None);
+        assert!(e.effective(&situation(false)).is_some());
     }
 
     #[test]
     fn random_expression_fires_on_interval_and_expires() {
-        let sw = EventSwitches::default();
-        let s = situation(&sw, false);
+        let s = situation(false);
         let mut e = sample();
         let mut rng = SplitMix64::new(3);
         let t0 = WallMs(0);
@@ -314,13 +347,12 @@ mod tests {
 
     #[test]
     fn pool_change_rearms_and_clears_random() {
-        let sw = EventSwitches::default();
         let mut e = sample();
         let mut rng = SplitMix64::new(3);
-        let chill = situation(&sw, false);
+        let chill = situation(false);
         e.sync_schedule(true, 5, &chill, WallMs(0));
         e.tick(&chill, WallMs(5_000), &mut rng);
-        let music = situation(&sw, true);
+        let music = situation(true);
         e.sync_schedule(true, 5, &music, WallMs(6_000));
         assert_eq!(e.effective(&music).map(|m| m.id.as_str()), Some(NEUTRAL));
         assert!(e.random_pool(&music).iter().all(|m| m.id != "doze"));
@@ -328,8 +360,7 @@ mod tests {
 
     #[test]
     fn disabled_schedule_never_fires() {
-        let sw = EventSwitches::default();
-        let s = situation(&sw, false);
+        let s = situation(false);
         let mut e = sample();
         let mut rng = SplitMix64::new(3);
         e.sync_schedule(false, 5, &s, WallMs(0));

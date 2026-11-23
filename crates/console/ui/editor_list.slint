@@ -1,0 +1,130 @@
+// 表情编辑器列表视图：一级表情、二级表情分组，以及新建/编辑/删除入口。
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Badge, ButtonKind, Card, Notice, PillButton } from "widgets.slint";
+import { EditorRow, Store } from "store.slint";
+
+component EditorRowItem inherits HorizontalLayout {
+    in property <EditorRow> item;
+    spacing: 8px;
+
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 2px;
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Text {
+                text: root.item.name;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Badge {
+                text: root.item.builtin ? "内置" : "自定义";
+                tone: root.item.builtin ? Theme.text-secondary : Theme.accent-strong-text;
+                tone-soft: root.item.builtin ? Theme.surface-alt : Theme.accent-soft;
+            }
+        }
+        Text {
+            text: root.item.summary;
+            font-size: Theme.font-caption;
+            color: Theme.text-muted;
+            overflow: elide;
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            spacing: 4px;
+            PillButton {
+                kind: ButtonKind.secondary;
+                compact: true;
+                text: "编辑";
+                clicked => { Store.editor-edit(root.item.id); }
+            }
+            if !root.item.builtin: PillButton {
+                kind: ButtonKind.danger;
+                compact: true;
+                text: "删除";
+                clicked => { Store.editor-delete(root.item.id); }
+            }
+        }
+    }
+}
+
+export component EditorList inherits ScrollView {
+    content-width: self.visible-width;
+    VerticalLayout {
+        padding: Theme.page-padding;
+        spacing: Theme.gap;
+        alignment: start;
+
+        Card {
+            HorizontalLayout {
+                spacing: 8px;
+                PillButton {
+                    kind: ButtonKind.ghost;
+                    compact: true;
+                    text: "← 返回";
+                    clicked => { Store.editor-close(); }
+                }
+                Text {
+                    text: "表情编辑器";
+                    font-size: Theme.font-title;
+                    font-weight: 600;
+                    color: Theme.text;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                }
+                PillButton {
+                    kind: ButtonKind.primary;
+                    compact: true;
+                    text: "+ 新建表情";
+                    clicked => { Store.editor-new(); }
+                }
+            }
+        }
+
+        if Store.editor.warning != "": Notice {
+            text: Store.editor.warning;
+            tone: Theme.amber;
+            tone-soft: Theme.amber-soft;
+        }
+
+        Card {
+            title: "一级表情";
+            hint: "替换眼和嘴";
+            VerticalLayout {
+                spacing: 0px;
+                for entry in Store.editor-rows: VerticalLayout {
+                    if entry.primary: VerticalLayout {
+                        padding-top: 4px;
+                        padding-bottom: 4px;
+                        EditorRowItem { item: entry; }
+                    }
+                }
+            }
+        }
+
+        Card {
+            title: "二级表情";
+            hint: "叠加眼嘴或特效";
+            VerticalLayout {
+                spacing: 0px;
+                for entry in Store.editor-rows: VerticalLayout {
+                    if !entry.primary: VerticalLayout {
+                        padding-top: 4px;
+                        padding-bottom: 4px;
+                        EditorRowItem { item: entry; }
+                    }
+                }
+            }
+        }
+    }
+}

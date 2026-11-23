@@ -3,14 +3,16 @@
 //! 这里只做"怎么显示"：文案、格式、下标与 id 的对应。"能不能做"的判断调用 core 的方法，
 //! 不在这里重新实现。
 
+pub mod editor;
 mod settings;
 #[cfg(test)]
 mod tests;
 
-pub use settings::{Settings, ShortcutItem, ThemePresetView};
+pub use editor::{EditorDraftView, EditorRow, EditorView};
+pub use settings::{AccentPresetView, Settings, ShortcutItem};
 
 use yume_core::model::audio::{AudioSource, AudioStatus};
-use yume_core::model::events::{ActivityMode, EventContext, EventSwitches, RandomEvent};
+use yume_core::model::events::ActivityMode;
 use yume_core::model::expression::ExpressionKind;
 use yume_core::model::pet::{CharacterStatus, Dialog};
 use yume_core::model::settings::DEFAULT_FONT_FAMILY;
@@ -28,13 +30,14 @@ pub struct View {
     pub emotion: Emotion,
     pub base_expressions: Vec<Chip>,
     pub accessory_expressions: Vec<Chip>,
-    pub event_columns: Vec<String>,
-    pub event_rows: Vec<EventRow>,
+    pub editor: EditorView,
+    pub editor_rows: Vec<EditorRow>,
+    pub editor_draft: EditorDraftView,
     pub music: Music,
     pub devices: Vec<String>,
     pub settings: Settings,
     pub characters: Vec<String>,
-    pub theme_presets: Vec<ThemePresetView>,
+    pub accent_presets: Vec<AccentPresetView>,
     pub shortcuts: Vec<ShortcutItem>,
     pub fonts: Vec<String>,
     pub palette: Option<ThemePalette>,
@@ -117,19 +120,6 @@ pub struct Chip {
     pub enabled: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct EventRow {
-    pub name: String,
-    /// 按 `EventContext::ALL` 的顺序。
-    pub cells: Vec<EventCell>,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct EventCell {
-    pub on: bool,
-    pub editable: bool,
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AudioPhase {
     #[default]
@@ -170,12 +160,14 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         .collect();
     let (fonts, font_families) = settings::font_options(state);
     let (base_expressions, accessory_expressions) = expression_chips(state);
+    let s = state.settings();
     let palette = resolve_palette(
-        state.settings().theme,
-        state.settings().custom_accent.as_deref(),
+        s.background,
+        s.custom_background.as_deref(),
+        s.accent,
+        s.custom_accent.as_deref(),
     );
-    let font_family = state
-        .settings()
+    let font_family = s
         .font_family
         .clone()
         .unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_owned());
@@ -197,18 +189,16 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         emotion: emotion(state),
         base_expressions,
         accessory_expressions,
-        event_columns: EventContext::ALL
-            .iter()
-            .map(|c| context_name(*c).into())
-            .collect(),
-        event_rows: event_rows(state.switches()),
+        editor: editor::project_editor(state),
+        editor_rows: editor::project_rows(state),
+        editor_draft: editor::project_draft(state),
         music: music(state, now, &device_ids),
         devices: std::iter::once("系统默认输出设备".to_owned())
             .chain(state.audio().devices.iter().map(|d| d.name.clone()))
             .collect(),
         settings: settings::project_settings(state, &font_families),
         characters: settings::characters(state),
-        theme_presets: settings::theme_presets(state),
+        accent_presets: settings::accent_presets(state),
         shortcuts: settings::shortcut_items(state),
         fonts,
         palette: Some(palette),
@@ -382,40 +372,6 @@ fn expression_chips(state: &AppState) -> (Vec<Chip>, Vec<Chip>) {
         }
     }
     (bases, accessories)
-}
-
-fn event_rows(switches: &EventSwitches) -> Vec<EventRow> {
-    RandomEvent::ALL
-        .iter()
-        .map(|&event| EventRow {
-            name: event_name(event).into(),
-            cells: EventContext::ALL
-                .iter()
-                .map(|&ctx| EventCell {
-                    on: switches.get(ctx, event),
-                    editable: EventSwitches::is_editable(ctx, event),
-                })
-                .collect(),
-        })
-        .collect()
-}
-
-#[must_use]
-pub fn event_name(event: RandomEvent) -> &'static str {
-    match event {
-        RandomEvent::Doze => "打瞌睡",
-        RandomEvent::Think => "思考",
-        RandomEvent::Shock => "震惊",
-        RandomEvent::Love => "喜欢",
-    }
-}
-
-fn context_name(ctx: EventContext) -> &'static str {
-    match ctx {
-        EventContext::Chill => "休闲",
-        EventContext::Study => "自习",
-        EventContext::Music => "听歌",
-    }
 }
 
 fn music(state: &AppState, now: WallMs, device_ids: &[Option<String>]) -> Music {

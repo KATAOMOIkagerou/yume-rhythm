@@ -1,0 +1,296 @@
+// 表情编辑器新建/编辑表单视图，以及整合后的 `EditorPage`。
+
+import { LineEdit, ScrollView, SpinBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Badge, ButtonKind, Card, Notice, PillButton, Segmented, SettingRow } from "widgets.slint";
+import { Check, Toggle } from "controls.slint";
+import { Store } from "store.slint";
+import { EditorList } from "editor_list.slint";
+
+component AssetSlotRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> filename;
+    in property <bool> has-file;
+    in property <bool> editable;
+    callback pick();
+    callback clear();
+
+    spacing: 6px;
+    Text {
+        width: 40px;
+        text: root.label;
+        font-size: Theme.font-body;
+        color: Theme.text;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        horizontal-stretch: 1;
+        height: 28px;
+        border-radius: 7px;
+        background: Theme.surface-alt;
+        border-width: 1px;
+        border-color: Theme.border;
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            Text {
+                text: root.filename;
+                font-size: Theme.font-caption;
+                color: root.has-file ? Theme.text : Theme.text-muted;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+    PillButton {
+        kind: ButtonKind.secondary;
+        compact: true;
+        enabled: root.editable;
+        text: "选择 PNG";
+        clicked => { root.pick(); }
+    }
+    if root.has-file && root.editable: PillButton {
+        kind: ButtonKind.ghost;
+        compact: true;
+        text: "清除";
+        clicked => { root.clear(); }
+    }
+}
+
+component EditorForm inherits ScrollView {
+    content-width: self.visible-width;
+    VerticalLayout {
+        padding: Theme.page-padding;
+        spacing: Theme.gap;
+        alignment: start;
+
+        Card {
+            HorizontalLayout {
+                spacing: 8px;
+                PillButton {
+                    kind: ButtonKind.ghost;
+                    compact: true;
+                    text: "← 列表";
+                    clicked => { Store.editor-cancel(); }
+                }
+                Text {
+                    text: Store.editor-draft.title;
+                    font-size: Theme.font-title;
+                    font-weight: 600;
+                    color: Theme.text;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Badge {
+                    text: Store.editor-draft.builtin ? "内置" : "自定义";
+                    tone: Store.editor-draft.builtin ? Theme.text-secondary : Theme.accent-strong-text;
+                    tone-soft: Store.editor-draft.builtin ? Theme.surface-alt : Theme.accent-soft;
+                }
+            }
+        }
+
+        Card {
+            title: "名称与素材";
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    width: 40px;
+                    text: "分类";
+                    font-size: Theme.font-body;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+                Segmented {
+                    options: ["一级", "二级"];
+                    current: Store.editor-draft.primary ? 0 : 1;
+                    enabled: Store.editor-draft.is-new;
+                    selected(i) => { Store.editor-set-kind(i == 0); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    width: 40px;
+                    text: "名字";
+                    font-size: Theme.font-body;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+                name-input := LineEdit {
+                    horizontal-stretch: 1;
+                    text: Store.editor-draft.name;
+                    enabled: !Store.editor-draft.builtin;
+                    placeholder-text: "最多 12 个字";
+                    edited(t) => { Store.editor-set-name(t); }
+                }
+            }
+
+            if Store.editor-draft.builtin: Notice {
+                text: "内置表情的素材和名字不能修改";
+                tone: Theme.text-secondary;
+                tone-soft: Theme.surface-alt;
+            }
+
+            AssetSlotRow {
+                label: "眼睛";
+                filename: Store.editor-draft.eyes-text;
+                has-file: Store.editor-draft.has-eyes;
+                editable: !Store.editor-draft.builtin;
+                pick => { Store.editor-pick-asset(0); }
+                clear => { Store.editor-clear-asset(0); }
+            }
+            AssetSlotRow {
+                label: "嘴巴";
+                filename: Store.editor-draft.mouth-text;
+                has-file: Store.editor-draft.has-mouth;
+                editable: !Store.editor-draft.builtin;
+                pick => { Store.editor-pick-asset(1); }
+                clear => { Store.editor-clear-asset(1); }
+            }
+            AssetSlotRow {
+                label: "特效";
+                filename: Store.editor-draft.overlay-text;
+                has-file: Store.editor-draft.has-overlay;
+                editable: !Store.editor-draft.builtin;
+                pick => { Store.editor-pick-asset(2); }
+                clear => { Store.editor-clear-asset(2); }
+            }
+
+            Text {
+                text: Store.editor.canvas-hint + "；一级需眼睛+嘴巴，二级三选一即可。";
+                font-size: Theme.font-caption;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+
+        Card {
+            title: "出现条件（何时可随机）";
+            SettingRow {
+                title: "参与随机";
+                description: "开启后会在下方勾选的场景自动出现";
+                Toggle {
+                    label: "参与随机";
+                    checked: Store.editor-draft.random;
+                    toggled(on) => { Store.editor-set-random(on); }
+                }
+            }
+            SettingRow {
+                title: "显示时长（秒）";
+                description: "随机切出后停留的时间";
+                dur := SpinBox {
+                    width: 100px;
+                    minimum: 1;
+                    maximum: 600;
+                    value: Store.editor-draft.duration-s;
+                    edited(v) => { Store.editor-set-duration-s(v); }
+                }
+            }
+            HorizontalLayout {
+                spacing: 14px;
+                HorizontalLayout {
+                    spacing: 6px;
+                    Check {
+                        label: "休闲时允许";
+                        checked: Store.editor-draft.chill;
+                        tone: Theme.violet;
+                        toggled(on) => { Store.editor-set-condition(0, on); }
+                    }
+                    Text {
+                        text: "休闲";
+                        font-size: Theme.font-body;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Check {
+                        label: "自习时允许";
+                        checked: Store.editor-draft.study;
+                        tone: Theme.violet;
+                        toggled(on) => { Store.editor-set-condition(1, on); }
+                    }
+                    Text {
+                        text: "自习";
+                        font-size: Theme.font-body;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 6px;
+                    Check {
+                        label: "听歌时允许";
+                        checked: Store.editor-draft.music;
+                        enabled: !Store.editor-draft.music-locked;
+                        tone: Theme.violet;
+                        toggled(on) => { Store.editor-set-condition(2, on); }
+                    }
+                    Text {
+                        text: "听歌";
+                        font-size: Theme.font-body;
+                        color: Store.editor-draft.music-locked ? Theme.text-muted : Theme.text;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            if Store.editor-draft.music-locked: Notice {
+                text: "播放音乐时不会打瞌睡（听歌开关已锁定）。";
+            }
+        }
+
+        if Store.editor-draft.error != "": Notice {
+            text: Store.editor-draft.error;
+            tone: Theme.red;
+            tone-soft: Theme.red-soft;
+        }
+
+        HorizontalLayout {
+            spacing: 6px;
+            PillButton {
+                kind: ButtonKind.ghost;
+                compact: true;
+                text: "恢复默认条件";
+                clicked => { Store.editor-reset-rule(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            PillButton {
+                kind: ButtonKind.secondary;
+                compact: true;
+                text: "取消";
+                clicked => { Store.editor-cancel(); }
+            }
+            PillButton {
+                kind: ButtonKind.primary;
+                compact: true;
+                enabled: !Store.editor-draft.saving;
+                text: Store.editor-draft.saving ? "保存中…" : "保存";
+                clicked => { Store.editor-save(); }
+            }
+        }
+    }
+
+    property <string> model-name: Store.editor-draft.name;
+    changed model-name => {
+        if (name-input.text != root.model-name) {
+            name-input.text = root.model-name;
+        }
+    }
+
+    property <int> model-duration: Store.editor-draft.duration-s;
+    changed model-duration => {
+        if (dur.value != root.model-duration) {
+            dur.value = root.model-duration;
+        }
+    }
+}
+
+export component EditorPage inherits Rectangle {
+    if !Store.editor-draft.active: EditorList { width: 100%; height: 100%; }
+    if Store.editor-draft.active: EditorForm { width: 100%; height: 100%; }
+}

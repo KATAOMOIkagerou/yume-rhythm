@@ -1,12 +1,13 @@
 //! `Command`：修改状态的唯一入口（docs/架构.md 第 3 节）。按领域分组，每组由 `update` 下的同名模块处理。
 
 use crate::model::audio::{AudioDevice, AudioError, Telemetry, TempoShift};
-use crate::model::events::{ActivityMode, EventContext, RandomEvent};
-use crate::model::expression::ExpressionMeta;
+use crate::model::editor::AssetSlot;
+use crate::model::events::{ActivityMode, EventContext};
+use crate::model::expression::{ExpressionKind, ExpressionMeta};
 use crate::model::pet::CharacterInfo;
 use crate::model::settings::PetPosition;
 use crate::model::shortcuts::ShortcutAction;
-use crate::model::theme::ThemePreset;
+use crate::model::theme::{AccentPreset, BackgroundMode};
 use crate::model::timer::TimerMode;
 use crate::model::todo_md::TodoMdError;
 
@@ -18,6 +19,7 @@ pub enum Command {
     Tick,
     Study(StudyCommand),
     Expression(ExpressionCommand),
+    Editor(EditorCommand),
     Todo(TodoCommand),
     Audio(AudioCommand),
     Settings(SettingsCommand),
@@ -46,11 +48,29 @@ pub enum StudyCommand {
 pub enum ExpressionCommand {
     /// 手动选择表情。再次选择当前表情会回到自然表情。
     Select(String),
-    SetEventSwitch {
-        context: EventContext,
-        event: RandomEvent,
-        on: bool,
-    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EditorCommand {
+    Open,
+    Close,
+    NewDraft,
+    EditExisting(String),
+    CancelDraft,
+    SetKind(ExpressionKind),
+    SetName(String),
+    PickAsset(AssetSlot),
+    AssetPicked { slot: AssetSlot, path: String },
+    AssetRejected(String),
+    ClearAsset(AssetSlot),
+    SetCondition { context: EventContext, on: bool },
+    SetRandom(bool),
+    SetDurationMs(i64),
+    ResetRule,
+    Save,
+    Delete(String),
+    Saved,
+    SaveFailed(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -124,9 +144,18 @@ pub enum SettingsCommand {
     /// 托盘菜单的勾选项。
     ToggleAutostart,
     SetHideOnFullscreen(bool),
-    /// 主题预设与可选自定义强调色 HEX。
-    SetTheme(ThemePreset),
+    /// 背景模式、强调色与控制台背景图。
+    SetBackgroundMode(BackgroundMode),
+    SetCustomBackground(Option<String>),
+    SetAccent(AccentPreset),
     SetCustomAccent(Option<String>),
+    PickBackgroundImage,
+    BackgroundImageLoaded {
+        path: String,
+    },
+    BackgroundImageFailed(String),
+    ClearBackgroundImage,
+    SetBackgroundDim(f32),
     /// 控制台与桌宠透明度。
     SetConsoleOpacity(f32),
     SetPetOpacity(f32),
@@ -183,6 +212,8 @@ pub enum CharacterCommand {
         id: String,
         name: String,
         expressions: Vec<ExpressionMeta>,
+        canvas: (u32, u32),
+        custom_warning: Option<String>,
     },
     LoadFailed {
         id: String,

@@ -1,13 +1,13 @@
-// 设置页的外观模块：主题色、自定义强调色、控制台与桌宠透明度、界面字体。
+// 设置页的外观模块：背景模式与背景图片、强调色、控制台与桌宠透明度。
 
-import { ComboBox, LineEdit } from "std-widgets.slint";
+import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { ButtonKind, Card, Notice, PillButton } from "widgets.slint";
+import { ButtonKind, Card, Chip, Notice, PillButton } from "widgets.slint";
 import { RangeSlider } from "controls.slint";
-import { Store, ThemePresetOption } from "store.slint";
+import { AccentOption, Store } from "store.slint";
 
-component ThemeSwatchChip inherits Rectangle {
-    in property <ThemePresetOption> option;
+component AccentSwatchChip inherits Rectangle {
+    in property <AccentOption> option;
     callback clicked();
 
     height: 30px;
@@ -49,24 +49,163 @@ component ThemeSwatchChip inherits Rectangle {
     }
 }
 
-export component ThemeCard inherits Card {
-    title: "主题色";
+export component BackgroundCard inherits Card {
+    title: "背景";
 
-    if Store.theme-presets.length >= 6: VerticalLayout {
+    HorizontalLayout {
+        spacing: 6px;
+        Chip {
+            horizontal-stretch: 1;
+            text: "浅色";
+            selected: Store.settings.background-index == 0;
+            clicked => { Store.set-background-mode("light"); }
+        }
+        Chip {
+            horizontal-stretch: 1;
+            text: "深色";
+            selected: Store.settings.background-index == 1;
+            clicked => { Store.set-background-mode("dark"); }
+        }
+        Chip {
+            horizontal-stretch: 1;
+            text: "自定义";
+            selected: Store.settings.background-index == 2;
+            clicked => { Store.set-background-mode("custom"); }
+        }
+    }
+
+    if Store.settings.background-index == 2: HorizontalLayout {
+        spacing: 6px;
+        bg-input := LineEdit {
+            horizontal-stretch: 1;
+            text: Store.settings.custom-background;
+            placeholder-text: "输入背景色，如 #1c1f2b";
+            font-size: Theme.font-caption;
+            accepted(t) => { Store.set-custom-background(t); }
+        }
+        PillButton {
+            kind: ButtonKind.secondary;
+            compact: true;
+            text: "应用";
+            clicked => { Store.set-custom-background(bg-input.text); }
+        }
+
+        property <string> model-bg: Store.settings.custom-background;
+        changed model-bg => {
+            if (bg-input.text != self.model-bg) {
+                bg-input.text = self.model-bg;
+            }
+        }
+    }
+
+    if Store.settings.bg-error: Notice {
+        text: "背景色格式不对，请输入 6 位十六进制色值（例如 #1c1f2b）";
+        tone: Theme.red;
+        tone-soft: Theme.red-soft;
+    }
+
+    Rectangle {
+        height: 1px;
+        background: Theme.divider;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: "背景图片";
+                font-size: Theme.font-body;
+                color: Theme.text;
+            }
+            Text {
+                text: Store.settings.has-bg-image ? Store.settings.bg-image-name : "未设置（纯色背景）";
+                font-size: Theme.font-caption;
+                color: Theme.text-muted;
+                overflow: elide;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 4px;
+                PillButton {
+                    kind: ButtonKind.secondary;
+                    compact: true;
+                    text: "导入图片";
+                    clicked => { Store.pick-background-image(); }
+                }
+                if Store.settings.has-bg-image: PillButton {
+                    kind: ButtonKind.ghost;
+                    compact: true;
+                    text: "清除";
+                    clicked => { Store.clear-background-image(); }
+                }
+            }
+        }
+    }
+
+    if Store.settings.has-bg-image: VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "遮罩浓度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.bg-dim-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        dim-slider := RangeSlider {
+            label: "背景遮罩浓度";
+            minimum: 0.2;
+            maximum: 0.95;
+            step: 0.05;
+            value: Store.settings.bg-dim;
+            changed(v) => { Store.set-background-dim(v); }
+        }
+
+        property <float> model-dim: Store.settings.bg-dim;
+        changed model-dim => {
+            if (abs(dim-slider.value - self.model-dim) > 0.001) {
+                dim-slider.value = self.model-dim;
+            }
+        }
+    }
+
+    if Store.settings.bg-image-error != "": Notice {
+        text: Store.settings.bg-image-error;
+        tone: Theme.red;
+        tone-soft: Theme.red-soft;
+    }
+}
+
+export component AccentCard inherits Card {
+    title: "强调色";
+
+    if Store.accent-presets.length >= 5: VerticalLayout {
         spacing: 6px;
         HorizontalLayout {
             spacing: 6px;
-            for idx in [0, 1, 2]: ThemeSwatchChip {
-                option: Store.theme-presets[idx];
-                clicked => { Store.set-theme(Store.theme-presets[idx].key); }
+            for idx in [0, 1, 2]: AccentSwatchChip {
+                option: Store.accent-presets[idx];
+                clicked => { Store.set-accent(Store.accent-presets[idx].key); }
             }
         }
         HorizontalLayout {
             spacing: 6px;
-            for idx in [3, 4, 5]: ThemeSwatchChip {
-                option: Store.theme-presets[idx];
-                clicked => { Store.set-theme(Store.theme-presets[idx].key); }
+            for idx in [3, 4]: AccentSwatchChip {
+                option: Store.accent-presets[idx];
+                clicked => { Store.set-accent(Store.accent-presets[idx].key); }
             }
+            Rectangle { horizontal-stretch: 1; }
         }
     }
 
@@ -85,7 +224,7 @@ export component ThemeCard inherits Card {
             text: "应用";
             clicked => { Store.set-custom-accent(accent-input.text); }
         }
-        if Store.settings.custom-accent != "": PillButton {
+        if Store.settings.accent-custom-active: PillButton {
             kind: ButtonKind.ghost;
             compact: true;
             text: "清除";
@@ -173,50 +312,6 @@ export component OpacityCard inherits Card {
     changed model-pet-opacity => {
         if (abs(pet-slider.value - root.model-pet-opacity) > 0.001) {
             pet-slider.value = root.model-pet-opacity;
-        }
-    }
-}
-
-export component FontCard inherits Card {
-    title: "界面字体";
-
-    HorizontalLayout {
-        spacing: 6px;
-        picker := ComboBox {
-            horizontal-stretch: 1;
-            model: Store.fonts;
-            current-index: Store.settings.font-index;
-            selected => { Store.select-font(self.current-index); }
-        }
-    }
-
-    HorizontalLayout {
-        spacing: 6px;
-        alignment: start;
-        PillButton {
-            kind: ButtonKind.secondary;
-            compact: true;
-            text: "导入字体 (.ttf/.otf)";
-            clicked => { Store.pick-custom-font(); }
-        }
-        PillButton {
-            kind: ButtonKind.ghost;
-            compact: true;
-            text: "恢复默认";
-            clicked => { Store.reset-font(); }
-        }
-    }
-
-    if Store.settings.font-status != "": Notice {
-        text: Store.settings.font-status;
-        tone: Store.settings.font-failed ? Theme.red : Theme.text-secondary;
-        tone-soft: Store.settings.font-failed ? Theme.red-soft : Theme.surface-alt;
-    }
-
-    property <int> model-font-index: Store.settings.font-index;
-    changed model-font-index => {
-        if (picker.current-index != root.model-font-index) {
-            picker.current-index = root.model-font-index;
         }
     }
 }

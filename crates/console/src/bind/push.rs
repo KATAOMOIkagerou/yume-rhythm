@@ -2,7 +2,7 @@
 
 use crate::ui::{self, Theme};
 use crate::view::{self, View};
-use slint::{Color, ModelRc, VecModel};
+use slint::Color;
 use yume_core::model::theme::{Rgb, Rgba, ThemePalette};
 
 fn to_color(c: Rgb) -> Color {
@@ -106,21 +106,6 @@ pub(super) fn chip(c: &view::Chip) -> ui::ExpressionChip {
     }
 }
 
-pub(super) fn event_row(r: &view::EventRow) -> ui::EventRow {
-    let cells: Vec<_> = r
-        .cells
-        .iter()
-        .map(|c| ui::EventCell {
-            on: c.on,
-            editable: c.editable,
-        })
-        .collect();
-    ui::EventRow {
-        name: r.name.as_str().into(),
-        cells: ModelRc::new(VecModel::from(cells)),
-    }
-}
-
 pub(super) fn music(v: &View) -> ui::MusicView {
     let m = &v.music;
     ui::MusicView {
@@ -142,8 +127,8 @@ pub(super) fn music(v: &View) -> ui::MusicView {
     }
 }
 
-pub(super) fn theme_preset(opt: &view::ThemePresetView) -> ui::ThemePresetOption {
-    ui::ThemePresetOption {
+pub(super) fn accent_preset(opt: &view::AccentPresetView) -> ui::AccentOption {
+    ui::AccentOption {
         key: opt.key.as_str().into(),
         name: opt.name.as_str().into(),
         swatch: to_color(opt.swatch),
@@ -172,8 +157,17 @@ pub(super) fn settings(v: &View) -> ui::SettingsView {
         pet_opacity_text: s.pet_opacity_text.as_str().into(),
         console_opacity: s.console_opacity,
         console_opacity_text: s.console_opacity_text.as_str().into(),
+        background_index: s.background_index,
+        custom_background: s.custom_background.as_str().into(),
+        bg_error: s.bg_error,
+        accent_custom_active: s.accent_custom_active,
         custom_accent: s.custom_accent.as_str().into(),
         accent_error: s.accent_error,
+        has_bg_image: s.has_bg_image,
+        bg_image_name: s.bg_image_name.as_str().into(),
+        bg_dim: s.bg_dim,
+        bg_dim_text: s.bg_dim_text.as_str().into(),
+        bg_image_error: s.bg_image_error.as_str().into(),
         shortcut_error: s.shortcut_error.as_str().into(),
         font_index: s.font_index,
         font_status: s.font_status.as_str().into(),

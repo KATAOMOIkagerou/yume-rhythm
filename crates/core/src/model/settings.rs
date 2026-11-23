@@ -1,7 +1,7 @@
 //! 全局设置：默认值与取值范围集中在这里（功能清单第 11 节，以及重写新增项）。
 
 use crate::model::shortcuts::Shortcuts;
-use crate::model::theme::ThemePreset;
+use crate::model::theme::{AccentPreset, BackgroundMode};
 use serde::{Deserialize, Serialize};
 
 pub const RANDOM_INTERVAL_MIN_S: u32 = 5;
@@ -12,6 +12,9 @@ pub const PET_SCALE_MAX: f32 = 2.0;
 pub const CONSOLE_OPACITY_MIN: f32 = 0.4;
 pub const PET_OPACITY_MIN: f32 = 0.3;
 pub const OPACITY_MAX: f32 = 1.0;
+pub const BG_DIM_MIN: f32 = 0.2;
+pub const BG_DIM_MAX: f32 = 0.95;
+pub const BG_DIM_DEFAULT: f32 = 0.6;
 pub const DEFAULT_CHARACTER: &str = "sakura";
 pub const DEFAULT_FONT_FAMILY: &str = "Microsoft YaHei UI";
 
@@ -44,10 +47,18 @@ pub struct Settings {
     pub hide_on_fullscreen: bool,
     /// 当前角色包 id。
     pub character: String,
-    /// 控制台主题预设。
-    pub theme: ThemePreset,
+    /// 控制台背景模式：浅色、深色或自定义 HEX。
+    pub background: BackgroundMode,
+    /// 可选自定义背景色（`#rrggbb`）。
+    pub custom_background: Option<String>,
+    /// 控制台强调色预设。
+    pub accent: AccentPreset,
     /// 可选自定义强调色（`#rrggbb`）。
     pub custom_accent: Option<String>,
+    /// 控制台自定义背景图片路径。
+    pub background_image: Option<String>,
+    /// 背景图片之上的背景色遮罩浓度（0.2–0.95）。
+    pub background_dim: f32,
     /// 控制台窗口透明度，0.4–1.0。
     pub console_opacity: f32,
     /// 桌宠窗口透明度，0.3–1.0。
@@ -76,8 +87,12 @@ impl Default for Settings {
             autostart: false,
             hide_on_fullscreen: true,
             character: DEFAULT_CHARACTER.into(),
-            theme: ThemePreset::default(),
+            background: BackgroundMode::default(),
+            custom_background: None,
+            accent: AccentPreset::default(),
             custom_accent: None,
+            background_image: None,
+            background_dim: BG_DIM_DEFAULT,
             console_opacity: OPACITY_MAX,
             pet_opacity: OPACITY_MAX,
             shortcuts: Shortcuts::default(),
@@ -118,6 +133,16 @@ pub fn clamp_console_opacity(opacity: f32) -> f32 {
 #[must_use]
 pub fn clamp_pet_opacity(opacity: f32) -> f32 {
     clamp_opacity(opacity, PET_OPACITY_MIN)
+}
+
+/// 规整背景遮罩浓度到 0.2–0.95，按 5% 取整，非有限值回到 0.6。
+#[must_use]
+pub fn clamp_background_dim(dim: f32) -> f32 {
+    if !dim.is_finite() {
+        return BG_DIM_DEFAULT;
+    }
+    let stepped = (dim * 20.0).round() / 20.0;
+    stepped.clamp(BG_DIM_MIN, BG_DIM_MAX)
 }
 
 fn clamp_opacity(opacity: f32, min: f32) -> f32 {

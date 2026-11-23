@@ -1,4 +1,4 @@
-//! 表情选择与随机事件开关（功能清单第 6、7 节）。
+//! 表情选择（功能清单第 6 节）。
 
 use super::split_expressions;
 use crate::command::ExpressionCommand;
@@ -9,9 +9,6 @@ pub(super) fn handle(state: &mut AppState, cmd: ExpressionCommand) {
         ExpressionCommand::Select(id) => {
             let (expressions, situation) = split_expressions(state);
             expressions.select(&id, &situation);
-        }
-        ExpressionCommand::SetEventSwitch { context, event, on } => {
-            state.switches.set(context, event, on);
         }
     }
 }

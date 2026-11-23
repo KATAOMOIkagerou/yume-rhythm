@@ -1,4 +1,4 @@
-//! 控制台主题配色与自定义强调色（功能清单第 2 节）。
+//! 控制台外观模型：背景模式 + 强调色拆分，以及自定义颜色对比度推导（功能清单第 2 节）。
 //!
 //! 所有语义色都在这里确定性派生，避免界面层硬编码色值或出现低对比度文字。
 
@@ -6,24 +6,49 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ThemePreset {
+pub enum BackgroundMode {
+    #[default]
+    Light,
+    Dark,
+    Custom,
+}
+
+impl BackgroundMode {
+    pub const ALL: [Self; 3] = [Self::Light, Self::Dark, Self::Custom];
+
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::Custom => "custom",
+        }
+    }
+
+    #[must_use]
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| mode.key() == key)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccentPreset {
     #[default]
     Sakura,
     Sky,
     Lavender,
+    Sunset,
     Mint,
-    Peach,
-    Night,
 }
 
-impl ThemePreset {
-    pub const ALL: [Self; 6] = [
+impl AccentPreset {
+    pub const ALL: [Self; 5] = [
         Self::Sakura,
         Self::Sky,
         Self::Lavender,
+        Self::Sunset,
         Self::Mint,
-        Self::Peach,
-        Self::Night,
     ];
 
     #[must_use]
@@ -32,20 +57,38 @@ impl ThemePreset {
             Self::Sakura => "sakura",
             Self::Sky => "sky",
             Self::Lavender => "lavender",
+            Self::Sunset => "sunset",
             Self::Mint => "mint",
-            Self::Peach => "peach",
-            Self::Night => "night",
         }
     }
 
     #[must_use]
-    pub const fn is_dark(self) -> bool {
-        matches!(self, Self::Night)
+    pub const fn color(self) -> Rgb {
+        match self {
+            Self::Sakura => Rgb::new(0xd6, 0x55, 0x8c),
+            Self::Sky => Rgb::new(0x2d, 0x7f, 0xd6),
+            Self::Lavender => Rgb::new(0x7c, 0x5c, 0xde),
+            Self::Sunset => Rgb::new(0xe0, 0x70, 0x3a),
+            Self::Mint => Rgb::new(0x26, 0x99, 0x74),
+        }
     }
 
     #[must_use]
     pub fn from_key(key: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|preset| preset.key() == key)
+    }
+}
+
+/// 将旧版 `theme`（v0.2 预设名）迁移为「背景模式 + 强调色」。
+#[must_use]
+pub fn migrate_legacy_theme(key: &str) -> (BackgroundMode, AccentPreset) {
+    match key {
+        "night" => (BackgroundMode::Dark, AccentPreset::Sakura),
+        "sky" => (BackgroundMode::Light, AccentPreset::Sky),
+        "lavender" => (BackgroundMode::Light, AccentPreset::Lavender),
+        "peach" => (BackgroundMode::Light, AccentPreset::Sunset),
+        "mint" => (BackgroundMode::Light, AccentPreset::Mint),
+        _ => (BackgroundMode::Light, AccentPreset::Sakura),
     }
 }
 
@@ -131,94 +174,67 @@ pub fn normalize_hex_color(input: &str) -> Option<String> {
     parse_hex_color(input).map(Rgb::to_hex)
 }
 
-/// 依据预设和可选自定义强调色计算完整调色板。
+/// 依据背景模式、自定义背景色、强调色预设和可选自定义强调色计算完整调色板。
 #[must_use]
-pub fn resolve_palette(preset: ThemePreset, custom_accent: Option<&str>) -> ThemePalette {
-    let mut palette = preset_palette(preset);
-    if let Some(accent) = custom_accent.and_then(parse_hex_color) {
-        apply_accent(&mut palette, accent, preset.is_dark());
-    }
+pub fn resolve_palette(
+    bg_mode: BackgroundMode,
+    custom_bg: Option<&str>,
+    accent: AccentPreset,
+    custom_accent: Option<&str>,
+) -> ThemePalette {
+    let (bg, surface, dark) = resolve_base(bg_mode, custom_bg);
+    let accent_rgb = custom_accent
+        .and_then(parse_hex_color)
+        .unwrap_or_else(|| accent.color());
+    let mut palette = build_palette(bg, surface, accent_rgb, dark);
+    apply_accent(&mut palette, accent_rgb, dark);
     palette
 }
 
-fn preset_palette(preset: ThemePreset) -> ThemePalette {
-    match preset {
-        ThemePreset::Sakura => light_palette(
-            Rgb::new(0xf8, 0xf4, 0xf7),
-            Rgb::new(0xf5, 0xee, 0xf3),
-            Rgb::new(0xf1, 0xe8, 0xee),
-            Rgb::new(0xec, 0xe1, 0xe8),
-            Rgb::new(0xf2, 0xea, 0xef),
-            Rgb::new(0xd6, 0x55, 0x8c),
-            Rgb::new(0xc4, 0x46, 0x7c),
-            Rgb::new(0xb0, 0x3b, 0x6e),
-            Rgb::new(0xfc, 0xe8, 0xf1),
-            Rgb::new(0xb3, 0x32, 0x6a),
-        ),
-        ThemePreset::Sky => light_palette(
-            Rgb::new(0xf2, 0xf7, 0xfc),
-            Rgb::new(0xea, 0xf2, 0xfa),
-            Rgb::new(0xe2, 0xec, 0xf7),
-            Rgb::new(0xd9, 0xe5, 0xf2),
-            Rgb::new(0xe6, 0xef, 0xf8),
-            Rgb::new(0x2d, 0x7f, 0xd6),
-            Rgb::new(0x23, 0x6f, 0xc2),
-            Rgb::new(0x1b, 0x5d, 0xa8),
-            Rgb::new(0xe3, 0xf0, 0xfd),
-            Rgb::new(0x1c, 0x5b, 0xa6),
-        ),
-        ThemePreset::Lavender => light_palette(
-            Rgb::new(0xf6, 0xf4, 0xfc),
-            Rgb::new(0xef, 0xeb, 0xf9),
-            Rgb::new(0xe8, 0xe2, 0xf6),
-            Rgb::new(0xe2, 0xdc, 0xf0),
-            Rgb::new(0xec, 0xe7, 0xf6),
-            Rgb::new(0x7c, 0x5c, 0xde),
-            Rgb::new(0x6b, 0x4b, 0xcf),
-            Rgb::new(0x5b, 0x3d, 0xba),
-            Rgb::new(0xee, 0xe9, 0xfd),
-            Rgb::new(0x59, 0x3b, 0xb5),
-        ),
-        ThemePreset::Mint => light_palette(
-            Rgb::new(0xf2, 0xf9, 0xf6),
-            Rgb::new(0xe9, 0xf4, 0xef),
-            Rgb::new(0xe0, 0xef, 0xe8),
-            Rgb::new(0xd6, 0xe8, 0xe0),
-            Rgb::new(0xe4, 0xf1, 0xeb),
-            Rgb::new(0x26, 0x99, 0x74),
-            Rgb::new(0x1e, 0x86, 0x65),
-            Rgb::new(0x17, 0x72, 0x55),
-            Rgb::new(0xe0, 0xf5, 0xed),
-            Rgb::new(0x17, 0x6e, 0x52),
-        ),
-        ThemePreset::Peach => light_palette(
-            Rgb::new(0xfc, 0xf5, 0xf0),
-            Rgb::new(0xf9, 0xee, 0xe6),
-            Rgb::new(0xf5, 0xe6, 0xdc),
-            Rgb::new(0xef, 0xde, 0xd2),
-            Rgb::new(0xf6, 0xea, 0xe2),
-            Rgb::new(0xe0, 0x6c, 0x43),
-            Rgb::new(0xce, 0x5c, 0x34),
-            Rgb::new(0xb8, 0x4c, 0x26),
-            Rgb::new(0xfd, 0xeb, 0xe2),
-            Rgb::new(0xb3, 0x47, 0x22),
-        ),
-        ThemePreset::Night => ThemePalette {
-            bg: Rgb::new(0x18, 0x16, 0x21),
-            surface: Rgb::new(0x22, 0x1f, 0x2d),
-            surface_alt: Rgb::new(0x2c, 0x28, 0x3a),
-            surface_hover: Rgb::new(0x35, 0x30, 0x45),
-            border: Rgb::new(0x3b, 0x35, 0x4d),
-            divider: Rgb::new(0x31, 0x2c, 0x40),
+fn resolve_base(mode: BackgroundMode, custom_bg: Option<&str>) -> (Rgb, Rgb, bool) {
+    const LIGHT_BG: Rgb = Rgb::new(0xf7, 0xf7, 0xf9);
+    const LIGHT_SURFACE: Rgb = Rgb::new(0xff, 0xff, 0xff);
+    match mode {
+        BackgroundMode::Light => (LIGHT_BG, LIGHT_SURFACE, false),
+        BackgroundMode::Dark => (Rgb::new(0x14, 0x14, 0x17), Rgb::new(0x1e, 0x1e, 0x23), true),
+        BackgroundMode::Custom => {
+            if let Some(c) = custom_bg.and_then(parse_hex_color) {
+                let dark = perceived_luma(c) < 128;
+                let surface = if dark {
+                    mix(c, Rgb::new(0xff, 0xff, 0xff), 8)
+                } else {
+                    mix(c, Rgb::new(0xff, 0xff, 0xff), 70)
+                };
+                (c, surface, dark)
+            } else {
+                (LIGHT_BG, LIGHT_SURFACE, false)
+            }
+        }
+    }
+}
+
+fn build_palette(bg: Rgb, surface: Rgb, accent: Rgb, dark: bool) -> ThemePalette {
+    if dark {
+        let surface_alt = mix(surface, accent, 10);
+        let surface_hover = mix(surface, accent, 14);
+        let border = mix(mix(surface, Rgb::new(0xff, 0xff, 0xff), 14), accent, 10);
+        let divider = mix(mix(surface, Rgb::new(0xff, 0xff, 0xff), 8), accent, 8);
+        ThemePalette {
+            bg,
+            surface,
+            surface_alt,
+            surface_hover,
+            border,
+            divider,
             text: Rgb::new(0xf2, 0xee, 0xf7),
             text_secondary: Rgb::new(0xb8, 0xaf, 0xc7),
             text_muted: Rgb::new(0x88, 0x7e, 0x99),
             text_on_accent: Rgb::new(0xff, 0xff, 0xff),
-            accent: Rgb::new(0xe5, 0x6b, 0xa2),
-            accent_hover: Rgb::new(0xee, 0x7e, 0xb0),
-            accent_pressed: Rgb::new(0xd1, 0x57, 0x8e),
-            accent_soft: Rgb::new(0x3c, 0x25, 0x38),
-            accent_strong_text: Rgb::new(0xf9, 0xa8, 0xcc),
+            accent,
+            accent_hover: accent,
+            accent_pressed: accent,
+            accent_soft: surface_alt,
+            accent_strong_text: accent,
             violet: Rgb::new(0xa4, 0x8d, 0xf5),
             violet_soft: Rgb::new(0x2e, 0x27, 0x47),
             green: Rgb::new(0x4a, 0xc2, 0x8c),
@@ -228,48 +244,38 @@ fn preset_palette(preset: ThemePreset) -> ThemePalette {
             red: Rgb::new(0xe8, 0x6b, 0x6b),
             red_soft: Rgb::new(0x3d, 0x23, 0x28),
             scrim: Rgba::new(0x0b, 0x0a, 0x10, 0x99),
-        },
-    }
-}
-
-#[allow(clippy::too_many_arguments, reason = "色板构造参数清晰对应语义字段")]
-const fn light_palette(
-    bg: Rgb,
-    surface_alt: Rgb,
-    surface_hover: Rgb,
-    border: Rgb,
-    divider: Rgb,
-    accent: Rgb,
-    accent_hover: Rgb,
-    accent_pressed: Rgb,
-    accent_soft: Rgb,
-    accent_strong_text: Rgb,
-) -> ThemePalette {
-    ThemePalette {
-        bg,
-        surface: Rgb::new(0xff, 0xff, 0xff),
-        surface_alt,
-        surface_hover,
-        border,
-        divider,
-        text: Rgb::new(0x2d, 0x24, 0x31),
-        text_secondary: Rgb::new(0x75, 0x68, 0x7b),
-        text_muted: Rgb::new(0xa9, 0x9f, 0xae),
-        text_on_accent: Rgb::new(0xff, 0xff, 0xff),
-        accent,
-        accent_hover,
-        accent_pressed,
-        accent_soft,
-        accent_strong_text,
-        violet: Rgb::new(0x84, 0x67, 0xe8),
-        violet_soft: Rgb::new(0xef, 0xea, 0xfd),
-        green: Rgb::new(0x2c, 0x9a, 0x69),
-        green_soft: Rgb::new(0xe2, 0xf4, 0xeb),
-        amber: Rgb::new(0xb9, 0x7a, 0x0e),
-        amber_soft: Rgb::new(0xfc, 0xf2, 0xda),
-        red: Rgb::new(0xc9, 0x43, 0x43),
-        red_soft: Rgb::new(0xfc, 0xe9, 0xe9),
-        scrim: Rgba::new(0x2d, 0x24, 0x31, 0x66),
+        }
+    } else {
+        let surface_alt = mix(bg, accent, 6);
+        let surface_hover = mix(bg, accent, 10);
+        let border = mix(mix(bg, Rgb::new(0x00, 0x00, 0x00), 8), accent, 8);
+        let divider = mix(mix(bg, Rgb::new(0x00, 0x00, 0x00), 4), accent, 6);
+        ThemePalette {
+            bg,
+            surface,
+            surface_alt,
+            surface_hover,
+            border,
+            divider,
+            text: Rgb::new(0x2d, 0x24, 0x31),
+            text_secondary: Rgb::new(0x75, 0x68, 0x7b),
+            text_muted: Rgb::new(0xa9, 0x9f, 0xae),
+            text_on_accent: Rgb::new(0xff, 0xff, 0xff),
+            accent,
+            accent_hover: accent,
+            accent_pressed: accent,
+            accent_soft: surface_alt,
+            accent_strong_text: accent,
+            violet: Rgb::new(0x84, 0x67, 0xe8),
+            violet_soft: Rgb::new(0xef, 0xea, 0xfd),
+            green: Rgb::new(0x2c, 0x9a, 0x69),
+            green_soft: Rgb::new(0xe2, 0xf4, 0xeb),
+            amber: Rgb::new(0xb9, 0x7a, 0x0e),
+            amber_soft: Rgb::new(0xfc, 0xf2, 0xda),
+            red: Rgb::new(0xc9, 0x43, 0x43),
+            red_soft: Rgb::new(0xfc, 0xe9, 0xe9),
+            scrim: Rgba::new(0x2d, 0x24, 0x31, 0x66),
+        }
     }
 }
 
@@ -323,19 +329,71 @@ mod tests {
     }
 
     #[test]
-    fn custom_accent_adjusts_text_contrast_on_bright_color() {
-        let bright = resolve_palette(ThemePreset::Sakura, Some("#ffee55"));
-        assert_eq!(bright.accent, Rgb::new(0xff, 0xee, 0x55));
-        assert_eq!(bright.text_on_accent, Rgb::new(0x1f, 0x19, 0x24));
+    fn custom_accent_and_background_keep_contrast() {
+        let light = resolve_palette(
+            BackgroundMode::Light,
+            None,
+            AccentPreset::Sakura,
+            Some("#ffee55"),
+        );
+        assert_eq!(light.accent, Rgb::new(0xff, 0xee, 0x55));
+        assert_eq!(light.text_on_accent, Rgb::new(0x1f, 0x19, 0x24));
+        assert_eq!(light.text, Rgb::new(0x2d, 0x24, 0x31));
 
-        let dark_btn = resolve_palette(ThemePreset::Night, Some("#2244aa"));
-        assert_eq!(dark_btn.text_on_accent, Rgb::new(0xff, 0xff, 0xff));
+        let dark = resolve_palette(
+            BackgroundMode::Dark,
+            None,
+            AccentPreset::Sky,
+            Some("#2244aa"),
+        );
+        assert_eq!(dark.text, Rgb::new(0xf2, 0xee, 0xf7));
+        assert_eq!(dark.text_on_accent, Rgb::new(0xff, 0xff, 0xff));
+
+        let custom_dark = resolve_palette(
+            BackgroundMode::Custom,
+            Some("#202430"),
+            AccentPreset::Mint,
+            None,
+        );
+        assert_eq!(custom_dark.bg, Rgb::new(0x20, 0x24, 0x30));
+        assert_eq!(custom_dark.text, Rgb::new(0xf2, 0xee, 0xf7));
+
+        let custom_light = resolve_palette(
+            BackgroundMode::Custom,
+            Some("#e8f0fe"),
+            AccentPreset::Lavender,
+            None,
+        );
+        assert_eq!(custom_light.bg, Rgb::new(0xe8, 0xf0, 0xfe));
+        assert_eq!(custom_light.text, Rgb::new(0x2d, 0x24, 0x31));
+
+        let fallback =
+            resolve_palette(BackgroundMode::Custom, Some("bad"), AccentPreset::Sky, None);
+        assert_eq!(
+            fallback,
+            resolve_palette(BackgroundMode::Light, None, AccentPreset::Sky, None)
+        );
     }
 
     #[test]
-    fn all_presets_round_trip_keys() {
-        for preset in ThemePreset::ALL {
-            assert_eq!(ThemePreset::from_key(preset.key()), Some(preset));
+    fn all_keys_round_trip_and_legacy_migrates() {
+        for mode in BackgroundMode::ALL {
+            assert_eq!(BackgroundMode::from_key(mode.key()), Some(mode));
         }
+        for preset in AccentPreset::ALL {
+            assert_eq!(AccentPreset::from_key(preset.key()), Some(preset));
+        }
+        assert_eq!(
+            migrate_legacy_theme("night"),
+            (BackgroundMode::Dark, AccentPreset::Sakura)
+        );
+        assert_eq!(
+            migrate_legacy_theme("peach"),
+            (BackgroundMode::Light, AccentPreset::Sunset)
+        );
+        assert_eq!(
+            migrate_legacy_theme("sky"),
+            (BackgroundMode::Light, AccentPreset::Sky)
+        );
     }
 }

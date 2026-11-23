@@ -1,8 +1,10 @@
 //! `AppState`：全部业务状态。字段对外只读，修改只能经过 `update`（docs/架构.md 第 3 节）。
 
 use crate::model::audio::AudioState;
+use crate::model::editor::EditorState;
 use crate::model::events::{ActivityMode, EventSwitches};
-use crate::model::expression::{Expressions, Situation};
+use crate::model::expr_rules::ExpressionRules;
+use crate::model::expression::{ExpressionMeta, Expressions, Situation};
 use crate::model::pet::{CharacterState, Dialog, PetState};
 use crate::model::settings::Settings;
 use crate::model::shortcuts::{ShortcutAction, ShortcutError};
@@ -18,11 +20,16 @@ pub struct AppState {
     pub(crate) timer: StudyTimer,
     pub(crate) dialog: Dialog,
     pub(crate) switches: EventSwitches,
+    pub(crate) expression_rules: ExpressionRules,
+    pub(crate) raw_catalog: Vec<ExpressionMeta>,
     pub(crate) expressions: Expressions,
+    pub(crate) editor: EditorState,
     pub(crate) todo: TodoList,
     pub(crate) todo_md_doc: Option<TodoMdDoc>,
     pub(crate) todo_md_error: Option<TodoMdError>,
     pub(crate) todo_md_dirty_seq: u64,
+    pub(crate) bg_error: bool,
+    pub(crate) bg_image_error: Option<String>,
     pub(crate) accent_error: bool,
     pub(crate) shortcut_error: Option<ShortcutError>,
     pub(crate) global_hotkeys_failed: Vec<ShortcutAction>,
@@ -47,6 +54,7 @@ impl AppState {
             settings,
             study,
             event_switches,
+            expression_rules,
             todo,
             ..
         } = persisted;
@@ -56,11 +64,16 @@ impl AppState {
             timer: StudyTimer::new(study.minutes, study.mode),
             dialog: Dialog::None,
             switches: event_switches,
+            expression_rules,
+            raw_catalog: Vec::new(),
             expressions: Expressions::default(),
+            editor: EditorState::default(),
             todo,
             todo_md_doc: None,
             todo_md_error: None,
             todo_md_dirty_seq: 0,
+            bg_error: false,
+            bg_image_error: None,
             accent_error: false,
             shortcut_error: None,
             global_hotkeys_failed: Vec::new(),
@@ -82,6 +95,7 @@ impl AppState {
                 mode: self.timer.mode(),
             },
             event_switches: self.switches,
+            expression_rules: self.expression_rules.clone(),
             todo: self.todo.clone(),
             ..Persisted::default()
         }
@@ -113,8 +127,23 @@ impl AppState {
     }
 
     #[must_use]
+    pub fn expression_rules(&self) -> &ExpressionRules {
+        &self.expression_rules
+    }
+
+    #[must_use]
+    pub fn raw_catalog(&self) -> &[ExpressionMeta] {
+        &self.raw_catalog
+    }
+
+    #[must_use]
     pub fn expressions(&self) -> &Expressions {
         &self.expressions
+    }
+
+    #[must_use]
+    pub fn editor(&self) -> &EditorState {
+        &self.editor
     }
 
     #[must_use]
@@ -135,6 +164,16 @@ impl AppState {
     #[must_use]
     pub fn todo_md_dirty_seq(&self) -> u64 {
         self.todo_md_dirty_seq
+    }
+
+    #[must_use]
+    pub fn bg_error(&self) -> bool {
+        self.bg_error
+    }
+
+    #[must_use]
+    pub fn bg_image_error(&self) -> Option<&str> {
+        self.bg_image_error.as_deref()
     }
 
     #[must_use]
@@ -179,11 +218,10 @@ impl AppState {
 
     /// 判断表情是否可用的当前条件。
     #[must_use]
-    pub fn situation(&self) -> Situation<'_> {
+    pub fn situation(&self) -> Situation {
         Situation {
             activity: self.activity,
             music: self.audio.is_running(),
-            switches: &self.switches,
         }
     }
 }

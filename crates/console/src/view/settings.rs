@@ -1,11 +1,11 @@
-//! 设置页视图投影：主题预设、透明度、字体列表、快捷键与角色信息。
+//! 设置页视图投影：背景模式/背景图片、强调色、透明度、字体列表、快捷键与角色信息。
 
 use super::file_name;
 use yume_core::AppState;
 use yume_core::model::audio::AudioError;
 use yume_core::model::pet::CharacterStatus;
 use yume_core::model::shortcuts::{ShortcutAction, ShortcutError, display_label};
-use yume_core::model::theme::{Rgb, ThemePreset, resolve_palette};
+use yume_core::model::theme::{AccentPreset, BackgroundMode, Rgb};
 use yume_core::model::todo_md::TodoMdError;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -17,8 +17,17 @@ pub struct Settings {
     pub pet_opacity_text: String,
     pub console_opacity: f32,
     pub console_opacity_text: String,
+    pub background_index: i32,
+    pub custom_background: String,
+    pub bg_error: bool,
+    pub accent_custom_active: bool,
     pub custom_accent: String,
     pub accent_error: bool,
+    pub has_bg_image: bool,
+    pub bg_image_name: String,
+    pub bg_dim: f32,
+    pub bg_dim_text: String,
+    pub bg_image_error: String,
     pub shortcut_error: String,
     pub font_index: i32,
     pub font_status: String,
@@ -33,7 +42,7 @@ pub struct Settings {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ThemePresetView {
+pub struct AccentPresetView {
     pub key: String,
     pub name: String,
     pub swatch: Rgb,
@@ -70,6 +79,11 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
         .position(|f| f == &s.font_family)
         .and_then(|i| i32::try_from(i).ok())
         .unwrap_or(0);
+    let background_index = match s.background {
+        BackgroundMode::Light => 0,
+        BackgroundMode::Dark => 1,
+        BackgroundMode::Custom => 2,
+    };
 
     Settings {
         end_sound: s.end_sound,
@@ -79,8 +93,22 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
         pet_opacity_text: format!("{:.0}%", s.pet_opacity * 100.0),
         console_opacity: s.console_opacity,
         console_opacity_text: format!("{:.0}%", s.console_opacity * 100.0),
+        background_index,
+        custom_background: s.custom_background.clone().unwrap_or_default(),
+        bg_error: state.bg_error(),
+        accent_custom_active: s.custom_accent.is_some(),
         custom_accent: s.custom_accent.clone().unwrap_or_default(),
         accent_error: state.accent_error(),
+        has_bg_image: s.background_image.is_some(),
+        bg_image_name: s
+            .background_image
+            .as_deref()
+            .map(file_name)
+            .unwrap_or_default()
+            .to_owned(),
+        bg_dim: s.background_dim,
+        bg_dim_text: format!("{:.0}%", s.background_dim * 100.0),
+        bg_image_error: state.bg_image_error().unwrap_or_default().to_owned(),
         shortcut_error: state
             .shortcut_error()
             .map(shortcut_error_text)
@@ -103,18 +131,16 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
     }
 }
 
-pub(super) fn theme_presets(state: &AppState) -> Vec<ThemePresetView> {
-    let active = state.settings().theme;
-    ThemePreset::ALL
+pub(super) fn accent_presets(state: &AppState) -> Vec<AccentPresetView> {
+    let s = state.settings();
+    let custom_active = s.custom_accent.is_some();
+    AccentPreset::ALL
         .into_iter()
-        .map(|preset| {
-            let p = resolve_palette(preset, None);
-            ThemePresetView {
-                key: preset.key().to_owned(),
-                name: theme_name(preset).to_owned(),
-                swatch: if preset.is_dark() { p.bg } else { p.accent },
-                active: preset == active,
-            }
+        .map(|preset| AccentPresetView {
+            key: preset.key().to_owned(),
+            name: accent_name(preset).to_owned(),
+            swatch: preset.color(),
+            active: !custom_active && preset == s.accent,
         })
         .collect()
 }
@@ -163,14 +189,13 @@ pub(super) fn characters(state: &AppState) -> Vec<String> {
         .collect()
 }
 
-fn theme_name(preset: ThemePreset) -> &'static str {
+fn accent_name(preset: AccentPreset) -> &'static str {
     match preset {
-        ThemePreset::Sakura => "樱花粉",
-        ThemePreset::Sky => "晴空蓝",
-        ThemePreset::Lavender => "丁香紫",
-        ThemePreset::Mint => "薄荷绿",
-        ThemePreset::Peach => "暖橘色",
-        ThemePreset::Night => "深色暗夜",
+        AccentPreset::Sakura => "樱花粉",
+        AccentPreset::Sky => "晴空蓝",
+        AccentPreset::Lavender => "丁香紫",
+        AccentPreset::Sunset => "落日橘",
+        AccentPreset::Mint => "薄荷绿",
     }
 }
 

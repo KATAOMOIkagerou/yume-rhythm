@@ -54,14 +54,41 @@ export struct EmotionView {
     doze-note: bool,
 }
 
-export struct EventCell {
-    on: bool,
-    editable: bool,
+export struct EditorView {
+    open: bool,
+    warning: string,
+    canvas-hint: string,
 }
 
-export struct EventRow {
+export struct EditorRow {
+    id: string,
     name: string,
-    cells: [EventCell],
+    builtin: bool,
+    primary: bool,
+    summary: string,
+}
+
+export struct EditorDraftView {
+    active: bool,
+    is-new: bool,
+    builtin: bool,
+    primary: bool,
+    name: string,
+    eyes-text: string,
+    mouth-text: string,
+    overlay-text: string,
+    has-eyes: bool,
+    has-mouth: bool,
+    has-overlay: bool,
+    chill: bool,
+    study: bool,
+    music: bool,
+    music-locked: bool,
+    random: bool,
+    duration-s: int,
+    error: string,
+    saving: bool,
+    title: string,
 }
 
 export struct MusicView {
@@ -83,7 +110,7 @@ export struct MusicView {
     auto-follow: bool,
 }
 
-export struct ThemePresetOption {
+export struct AccentOption {
     key: string,
     name: string,
     swatch: color,
@@ -107,8 +134,17 @@ export struct SettingsView {
     pet-opacity-text: string,
     console-opacity: float,
     console-opacity-text: string,
+    background-index: int,
+    custom-background: string,
+    bg-error: bool,
+    accent-custom-active: bool,
     custom-accent: string,
     accent-error: bool,
+    has-bg-image: bool,
+    bg-image-name: string,
+    bg-dim: float,
+    bg-dim-text: string,
+    bg-image-error: string,
     shortcut-error: string,
     font-index: int,
     font-status: string,
@@ -130,13 +166,14 @@ export global Store {
     in property <EmotionView> emotion;
     in property <[ExpressionChip]> base-expressions;
     in property <[ExpressionChip]> accessory-expressions;
-    in property <[string]> event-columns;
-    in property <[EventRow]> event-rows;
+    in property <EditorView> editor;
+    in property <[EditorRow]> editor-rows;
+    in property <EditorDraftView> editor-draft;
     in property <MusicView> music;
     in property <[string]> devices;
     in property <SettingsView> settings;
     in property <[string]> characters;
-    in property <[ThemePresetOption]> theme-presets;
+    in property <[AccentOption]> accent-presets;
     in property <[ShortcutItem]> shortcuts;
     in property <[string]> fonts;
     // 当前正在录制快捷键时置为 true，避免顶层窗口快捷键误触发。
@@ -164,11 +201,25 @@ export global Store {
     callback todo-reload-md();
     callback todo-unbind-md();
 
-    // 表情
+    // 表情 & 编辑器
     callback select-expression(string);
     callback set-random-enabled(bool);
     callback set-random-interval(int);
-    callback set-event(int /* row */, int /* column */, bool);
+    callback editor-open();
+    callback editor-close();
+    callback editor-new();
+    callback editor-edit(string);
+    callback editor-cancel();
+    callback editor-set-kind(bool /* primary */);
+    callback editor-set-name(string);
+    callback editor-pick-asset(int /* slot: 0=eyes, 1=mouth, 2=overlay */);
+    callback editor-clear-asset(int /* slot */);
+    callback editor-set-condition(int /* ctx: 0=chill, 1=study, 2=music */, bool);
+    callback editor-set-random(bool);
+    callback editor-set-duration-s(int);
+    callback editor-reset-rule();
+    callback editor-save();
+    callback editor-delete(string);
 
     // 音乐
     callback audio-primary();
@@ -181,14 +232,19 @@ export global Store {
     callback set-show-bpm(bool);
     callback set-auto-follow(bool);
 
-    // 设置：外观、透明度、字体、快捷键、通用
+    // 设置：背景/强调色、透明度、字体、快捷键、通用
     callback set-end-sound(bool);
     callback set-pet-scale(float);
     callback set-pet-opacity(float);
     callback set-console-opacity(float);
-    callback set-theme(string);
+    callback set-background-mode(string);
+    callback set-custom-background(string);
+    callback set-accent(string);
     callback set-custom-accent(string);
     callback clear-custom-accent();
+    callback pick-background-image();
+    callback clear-background-image();
+    callback set-background-dim(float);
     callback record-shortcut(string /* action id */, bool /* ctrl */, bool /* alt */, bool /* shift */, string /* text */);
     callback clear-shortcut(string /* action id */);
     callback reset-shortcuts();

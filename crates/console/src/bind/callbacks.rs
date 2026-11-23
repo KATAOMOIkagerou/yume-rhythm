@@ -11,9 +11,9 @@ use yume_core::command::{
     TodoCommand,
 };
 use yume_core::model::audio::TempoShift;
-use yume_core::model::events::{ActivityMode, EventContext, RandomEvent};
+use yume_core::model::events::ActivityMode;
 use yume_core::model::shortcuts::{ShortcutAction, format_recorded};
-use yume_core::model::theme::ThemePreset;
+use yume_core::model::theme::{AccentPreset, BackgroundMode};
 use yume_core::model::timer::TimerMode;
 
 pub(super) fn wire(
@@ -25,6 +25,7 @@ pub(super) fn wire(
     wire_focus_and_todo(store, dispatch, &with_view);
     wire_emotion_and_audio(store, dispatch, &with_view);
     wire_settings(store, dispatch, &with_view, shown);
+    super::editor::wire(store, dispatch);
 }
 
 type ViewDispatcher = Rc<dyn Fn(&dyn Fn(&View) -> Option<Command>)>;
@@ -140,22 +141,6 @@ fn wire_emotion_and_audio(
             i64::from(s),
         )));
     });
-    let d = dispatch.clone();
-    store.on_set_event(move |row, column, on| {
-        let event = usize::try_from(row)
-            .ok()
-            .and_then(|r| RandomEvent::ALL.get(r));
-        let context = usize::try_from(column)
-            .ok()
-            .and_then(|c| EventContext::ALL.get(c));
-        if let (Some(&event), Some(&context)) = (event, context) {
-            d(Command::Expression(ExpressionCommand::SetEventSwitch {
-                context,
-                event,
-                on,
-            }));
-        }
-    });
 
     let w = with_view.clone();
     store.on_audio_primary(move || {
@@ -215,9 +200,21 @@ fn wire_settings(
         d(Command::Settings(SettingsCommand::SetConsoleOpacity(o)));
     });
     let d = dispatch.clone();
-    store.on_set_theme(move |key| {
-        if let Some(preset) = ThemePreset::from_key(&key) {
-            d(Command::Settings(SettingsCommand::SetTheme(preset)));
+    store.on_set_background_mode(move |key| {
+        if let Some(mode) = BackgroundMode::from_key(&key) {
+            d(Command::Settings(SettingsCommand::SetBackgroundMode(mode)));
+        }
+    });
+    let d = dispatch.clone();
+    store.on_set_custom_background(move |hex| {
+        d(Command::Settings(SettingsCommand::SetCustomBackground(
+            Some(hex.into()),
+        )));
+    });
+    let d = dispatch.clone();
+    store.on_set_accent(move |key| {
+        if let Some(preset) = AccentPreset::from_key(&key) {
+            d(Command::Settings(SettingsCommand::SetAccent(preset)));
         }
     });
     let d = dispatch.clone();
@@ -229,6 +226,16 @@ fn wire_settings(
     store.on_clear_custom_accent(send(dispatch, || {
         Command::Settings(SettingsCommand::SetCustomAccent(None))
     }));
+    store.on_pick_background_image(send(dispatch, || {
+        Command::Settings(SettingsCommand::PickBackgroundImage)
+    }));
+    store.on_clear_background_image(send(dispatch, || {
+        Command::Settings(SettingsCommand::ClearBackgroundImage)
+    }));
+    let d = dispatch.clone();
+    store.on_set_background_dim(move |dim| {
+        d(Command::Settings(SettingsCommand::SetBackgroundDim(dim)));
+    });
     let d = dispatch.clone();
     store.on_record_shortcut(move |action_id, ctrl, alt, shift, text| {
         let Some(action) = ShortcutAction::from_id(&action_id) else {

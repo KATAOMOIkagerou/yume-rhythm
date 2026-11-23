@@ -1,9 +1,9 @@
-// 「表情」页：手动表情、随机表情、随机事件开关矩阵。
+// 「表情」页：手动表情、随机表情、自定义表情编辑器入口。
 
 import { SpinBox, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { Badge, Card, Chip, Notice, SettingRow } from "widgets.slint";
-import { Check, Toggle } from "controls.slint";
+import { Badge, ButtonKind, Card, Chip, Notice, PillButton, SettingRow } from "widgets.slint";
+import { Toggle } from "controls.slint";
 import { Store, ExpressionChip } from "store.slint";
 
 component ChipGroup inherits Card {
@@ -39,44 +39,6 @@ component IntervalRow inherits SettingRow {
     changed model-interval => {
         if (interval.value != root.model-interval) {
             interval.value = root.model-interval;
-        }
-    }
-}
-
-component EventMatrix inherits Card {
-    title: "随机事件";
-    hint: "哪些场景下会随机出现";
-
-    HorizontalLayout {
-        spacing: 8px;
-        Rectangle { horizontal-stretch: 1; }
-        for column in Store.event-columns: Text {
-            width: 56px;
-            text: column;
-            font-size: Theme.font-caption;
-            color: Theme.text-muted;
-            horizontal-alignment: center;
-        }
-    }
-    for row[r] in Store.event-rows: HorizontalLayout {
-        spacing: 8px;
-        Text {
-            text: row.name;
-            font-size: Theme.font-body;
-            color: Theme.text;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
-        }
-        for cell[c] in row.cells: HorizontalLayout {
-            width: 56px;
-            alignment: center;
-            Check {
-                label: row.name + " · " + Store.event-columns[c];
-                checked: cell.on;
-                enabled: cell.editable;
-                tone: Theme.violet;
-                toggled(on) => { Store.set-event(r, c, on); }
-            }
         }
     }
 }
@@ -124,12 +86,12 @@ export component EmotionPage inherits ScrollView {
         }
 
         ChipGroup {
-            title: "整体表情";
+            title: "一级表情";
             chips: Store.base-expressions;
         }
 
         ChipGroup {
-            title: "配件与局部";
+            title: "二级表情";
             chips: Store.accessory-expressions;
         }
 
@@ -151,6 +113,18 @@ export component EmotionPage inherits ScrollView {
             IntervalRow { }
         }
 
-        EventMatrix { }
+        Card {
+            title: "自定义与出现条件";
+            SettingRow {
+                title: "管理表情与条件";
+                description: "新建自定义表情、设置每个表情什么时候会随机出现";
+                PillButton {
+                    kind: ButtonKind.secondary;
+                    compact: true;
+                    text: "表情编辑器";
+                    clicked => { Store.editor-open(); }
+                }
+            }
+        }
     }
 }

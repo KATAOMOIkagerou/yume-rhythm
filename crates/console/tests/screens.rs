@@ -18,13 +18,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use yume_console::Console;
 use yume_core::command::{
-    AudioCommand, CharacterCommand, ExpressionCommand, SettingsCommand, StudyCommand, TodoCommand,
+    AudioCommand, CharacterCommand, EditorCommand, ExpressionCommand, SettingsCommand,
+    StudyCommand, TodoCommand,
 };
 use yume_core::model::audio::{AudioDevice, AudioError, Telemetry};
 use yume_core::model::events::RandomEvent;
 use yume_core::model::expression::{ExpressionKind, ExpressionMeta};
 use yume_core::model::pet::CharacterInfo;
-use yume_core::model::theme::ThemePreset;
+use yume_core::model::theme::{AccentPreset, BackgroundMode};
 use yume_core::{AppState, Command, Ctx, SplitMix64, WallMs, update};
 
 const SCALE: f32 = 1.5;
@@ -63,7 +64,8 @@ impl World {
             kind,
             event,
             duration_ms: 3200,
-            random: true,
+            random: id != "neutral",
+            ..Default::default()
         };
         use ExpressionKind::{Accessory, Base};
         w.send(Command::Character(CharacterCommand::Scanned(vec![
@@ -84,6 +86,8 @@ impl World {
                 m("shock", "震惊", Accessory, Some(RandomEvent::Shock)),
                 m("love", "喜欢", Accessory, Some(RandomEvent::Love)),
             ],
+            canvas: (800, 800),
+            custom_warning: None,
         }));
         w
     }
@@ -211,8 +215,21 @@ fn render_every_page() {
 
     shoot("settings", &w, 3);
 
-    w.send(Command::Settings(SettingsCommand::SetTheme(
-        ThemePreset::Night,
+    w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
+        BackgroundMode::Dark,
     )));
-    shoot("settings_night", &w, 3);
+    w.send(Command::Settings(SettingsCommand::SetAccent(
+        AccentPreset::Sky,
+    )));
+    shoot("settings_dark", &w, 3);
+
+    w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
+        BackgroundMode::Light,
+    )));
+    w.send(Command::Editor(EditorCommand::Open));
+    shoot("editor_list", &w, 1);
+
+    w.send(Command::Editor(EditorCommand::NewDraft));
+    w.send(Command::Editor(EditorCommand::SetName("小星星".into())));
+    shoot("editor_new", &w, 1);
 }

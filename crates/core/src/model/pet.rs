@@ -44,4 +44,8 @@ pub struct CharacterState {
     /// 已加载角色的显示名。
     pub name: String,
     pub available: Vec<CharacterInfo>,
+    /// 当前角色画布尺寸（用于编辑器提示与自定义 PNG 尺寸校验）。
+    pub canvas: Option<(u32, u32)>,
+    /// 自定义表情目录加载警告（主包仍正常使用）。
+    pub custom_warning: Option<String>,
 }

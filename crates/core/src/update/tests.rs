@@ -13,7 +13,7 @@ use crate::model::expression::{ExpressionKind, ExpressionMeta, NEUTRAL};
 use crate::model::pet::{CharacterStatus, Dialog};
 use crate::model::settings::opacity_to_u8;
 use crate::model::shortcuts::{ShortcutAction, ShortcutError};
-use crate::model::theme::ThemePreset;
+use crate::model::theme::{AccentPreset, BackgroundMode};
 use crate::model::timer::{TimerMode, TimerStatus};
 use crate::model::todo_md::{TodoMdError, render_md};
 use crate::persist::Persisted;
@@ -37,6 +37,8 @@ impl World {
             id: "sakura".into(),
             name: "樱音".into(),
             expressions: catalog(),
+            canvas: (800, 800),
+            custom_warning: None,
         }));
         w
     }
@@ -74,6 +76,7 @@ fn catalog() -> Vec<ExpressionMeta> {
         event,
         duration_ms: 3200,
         random: false,
+        ..Default::default()
     };
     vec![
         m(NEUTRAL, ExpressionKind::Base, None),
@@ -275,10 +278,26 @@ fn audio_is_active_while_starting_and_running() {
 #[test]
 fn theme_and_opacity_settings_validate_and_clamp() {
     let mut w = World::new();
-    w.send(Command::Settings(SettingsCommand::SetTheme(
-        ThemePreset::Night,
+    w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
+        BackgroundMode::Dark,
     )));
-    assert_eq!(w.state.settings().theme, ThemePreset::Night);
+    assert_eq!(w.state.settings().background, BackgroundMode::Dark);
+
+    w.send(Command::Settings(SettingsCommand::SetCustomBackground(
+        Some("zzzzzz".into()),
+    )));
+    assert!(w.state.bg_error());
+    assert_eq!(w.state.settings().background, BackgroundMode::Dark);
+
+    w.send(Command::Settings(SettingsCommand::SetCustomBackground(
+        Some("#123456".into()),
+    )));
+    assert!(!w.state.bg_error());
+    assert_eq!(w.state.settings().background, BackgroundMode::Custom);
+    assert_eq!(
+        w.state.settings().custom_background.as_deref(),
+        Some("#123456")
+    );
 
     w.send(Command::Settings(SettingsCommand::SetCustomAccent(Some(
         "zzzzzz".into(),
@@ -291,6 +310,24 @@ fn theme_and_opacity_settings_validate_and_clamp() {
     ))));
     assert!(!w.state.accent_error());
     assert_eq!(w.state.settings().custom_accent.as_deref(), Some("#00aaff"));
+
+    w.send(Command::Settings(SettingsCommand::SetAccent(
+        AccentPreset::Mint,
+    )));
+    assert_eq!(w.state.settings().accent, AccentPreset::Mint);
+    assert_eq!(w.state.settings().custom_accent, None);
+
+    let fx = w.send(Command::Settings(SettingsCommand::BackgroundImageLoaded {
+        path: "C:/bg.png".into(),
+    }));
+    assert_eq!(
+        fx,
+        vec![Effect::ApplyBackgroundImage {
+            path: Some("C:/bg.png".into()),
+        }]
+    );
+    w.send(Command::Settings(SettingsCommand::SetBackgroundDim(0.05)));
+    assert!((w.state.settings().background_dim - 0.2).abs() < f32::EPSILON);
 
     w.send(Command::Settings(SettingsCommand::SetPetOpacity(0.1)));
     w.send(Command::Settings(SettingsCommand::SetConsoleOpacity(0.2)));
@@ -373,6 +410,7 @@ fn startup_requests_fonts_custom_font_and_bound_md() {
     let mut persisted = Persisted::default();
     persisted.settings.custom_font_path = Some("C:/fonts/custom.ttf".into());
     persisted.settings.todo_md_path = Some("D:/tasks.md".into());
+    persisted.settings.background_image = Some("C:/bg.jpg".into());
     let mut state = AppState::new(persisted);
     let mut rng = SplitMix64::new(1);
     let mut ctx = Ctx::new(WallMs(1000), &mut rng);
@@ -383,5 +421,8 @@ fn startup_requests_fonts_custom_font_and_bound_md() {
     }));
     assert!(fx.contains(&Effect::LoadTodoMd {
         path: "D:/tasks.md".into(),
+    }));
+    assert!(fx.contains(&Effect::ApplyBackgroundImage {
+        path: Some("C:/bg.jpg".into()),
     }));
 }

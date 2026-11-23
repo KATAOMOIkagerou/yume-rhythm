@@ -86,11 +86,17 @@ pub fn scan(roots: &[PathBuf]) -> Vec<CharacterInfo> {
     found
 }
 
-/// 加载角色包。
+/// 自定义表情根目录：`%APPDATA%\韵梦桌伴\custom_expressions`。
+#[must_use]
+pub fn custom_root(user_dir: Option<&Path>) -> Option<PathBuf> {
+    user_dir.map(|d| d.join("custom_expressions"))
+}
+
+/// 加载角色包，同时尝试合并对应角色的自定义表情。
 ///
 /// # Errors
-/// 找不到或格式有误时返回中文描述。
-pub fn load(roots: &[PathBuf], id: &str) -> Result<Pack, String> {
+/// 找不到或主包格式有误时返回中文描述。
+pub fn load(roots: &[PathBuf], custom_root: Option<&Path>, id: &str) -> Result<Pack, String> {
     if !is_valid_character_id(id) {
         return Err(format!("角色 id 不合法：{id}"));
     }
@@ -99,7 +105,9 @@ pub fn load(roots: &[PathBuf], id: &str) -> Result<Pack, String> {
         .map(|root| root.join(id))
         .find(|dir| dir.join(MANIFEST).is_file())
         .ok_or_else(|| format!("找不到角色「{id}」"))?;
-    Pack::load(&DirSource(dir), id).map_err(|e| e.to_string())
+    let custom_dir = custom_root.map(|root| DirSource(root.join(id)));
+    let custom_ref = custom_dir.as_ref().map(|d| d as &dyn PackSource);
+    Pack::load(&DirSource(dir), id, custom_ref).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -115,9 +123,9 @@ mod tests {
         let roots = vec![repo_characters()];
         let list = scan(&roots);
         assert!(list.iter().any(|c| c.id == "sakura"), "{list:?}");
-        assert!(load(&roots, "sakura").is_ok());
-        assert!(load(&roots, "../sakura").is_err());
-        assert!(load(&roots, "nobody").is_err());
+        assert!(load(&roots, None, "sakura").is_ok());
+        assert!(load(&roots, None, "../sakura").is_err());
+        assert!(load(&roots, None, "nobody").is_err());
     }
 
     #[test]

@@ -1,0 +1,50 @@
+// 设置页的界面字体卡片。
+
+import { ComboBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { ButtonKind, Card, Notice, PillButton } from "widgets.slint";
+import { Store } from "store.slint";
+
+export component FontCard inherits Card {
+    title: "界面字体";
+
+    HorizontalLayout {
+        spacing: 6px;
+        picker := ComboBox {
+            horizontal-stretch: 1;
+            model: Store.fonts;
+            current-index: Store.settings.font-index;
+            selected => { Store.select-font(self.current-index); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        PillButton {
+            kind: ButtonKind.secondary;
+            compact: true;
+            text: "导入字体 (.ttf/.otf)";
+            clicked => { Store.pick-custom-font(); }
+        }
+        PillButton {
+            kind: ButtonKind.ghost;
+            compact: true;
+            text: "恢复默认";
+            clicked => { Store.reset-font(); }
+        }
+    }
+
+    if Store.settings.font-status != "": Notice {
+        text: Store.settings.font-status;
+        tone: Store.settings.font-failed ? Theme.red : Theme.text-secondary;
+        tone-soft: Store.settings.font-failed ? Theme.red-soft : Theme.surface-alt;
+    }
+
+    property <int> model-font-index: Store.settings.font-index;
+    changed model-font-index => {
+        if (picker.current-index != root.model-font-index) {
+            picker.current-index = root.model-font-index;
+        }
+    }
+}

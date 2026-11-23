@@ -3,12 +3,14 @@
 //! 只推送有变化的部分；列表原地更新（不整体替换），避免正在输入的待办失去焦点。
 
 mod callbacks;
+mod editor;
 mod push;
 
 use crate::ui::{self, ConsoleWindow, Store, Theme};
 use crate::view::{self, View};
 use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 use yume_core::command::PetCommand;
 use yume_core::{AppState, Command, WallMs};
@@ -25,11 +27,10 @@ struct Models {
     todo_items: Rc<VecModel<ui::TodoRow>>,
     base: Rc<VecModel<ui::ExpressionChip>>,
     accessory: Rc<VecModel<ui::ExpressionChip>>,
-    event_columns: Rc<VecModel<SharedString>>,
-    event_rows: Rc<VecModel<ui::EventRow>>,
+    editor_rows: Rc<VecModel<ui::EditorRow>>,
     devices: Rc<VecModel<SharedString>>,
     characters: Rc<VecModel<SharedString>>,
-    theme_presets: Rc<VecModel<ui::ThemePresetOption>>,
+    accent_presets: Rc<VecModel<ui::AccentOption>>,
     shortcuts: Rc<VecModel<ui::ShortcutItem>>,
     fonts: Rc<VecModel<SharedString>>,
 }
@@ -45,11 +46,10 @@ impl Console {
             todo_items: Rc::new(VecModel::default()),
             base: Rc::new(VecModel::default()),
             accessory: Rc::new(VecModel::default()),
-            event_columns: Rc::new(VecModel::default()),
-            event_rows: Rc::new(VecModel::default()),
+            editor_rows: Rc::new(VecModel::default()),
             devices: Rc::new(VecModel::default()),
             characters: Rc::new(VecModel::default()),
-            theme_presets: Rc::new(VecModel::default()),
+            accent_presets: Rc::new(VecModel::default()),
             shortcuts: Rc::new(VecModel::default()),
             fonts: Rc::new(VecModel::default()),
         };
@@ -57,11 +57,10 @@ impl Console {
         store.set_todo_items(ModelRc::from(models.todo_items.clone()));
         store.set_base_expressions(ModelRc::from(models.base.clone()));
         store.set_accessory_expressions(ModelRc::from(models.accessory.clone()));
-        store.set_event_columns(ModelRc::from(models.event_columns.clone()));
-        store.set_event_rows(ModelRc::from(models.event_rows.clone()));
+        store.set_editor_rows(ModelRc::from(models.editor_rows.clone()));
         store.set_devices(ModelRc::from(models.devices.clone()));
         store.set_characters(ModelRc::from(models.characters.clone()));
-        store.set_theme_presets(ModelRc::from(models.theme_presets.clone()));
+        store.set_accent_presets(ModelRc::from(models.accent_presets.clone()));
         store.set_shortcuts(ModelRc::from(models.shortcuts.clone()));
         store.set_fonts(ModelRc::from(models.fonts.clone()));
 
@@ -112,6 +111,28 @@ impl Console {
         self.window.global::<Theme>().set_font_family(family.into());
     }
 
+    /// 设置或清除控制台窗口背景图片。
+    ///
+    /// # Errors
+    /// 图片文件不存在或无法解码时返回中文错误。
+    pub fn set_background_image(&self, path: Option<&str>) -> Result<(), String> {
+        let theme = self.window.global::<Theme>();
+        match path {
+            None => {
+                theme.set_has_bg_image(false);
+                theme.set_bg_image(slint::Image::default());
+                Ok(())
+            }
+            Some(p) => {
+                let image = slint::Image::load_from_path(Path::new(p))
+                    .map_err(|e| format!("无法加载背景图片：{e}"))?;
+                theme.set_bg_image(image);
+                theme.set_has_bg_image(true);
+                Ok(())
+            }
+        }
+    }
+
     /// 切换到第几个标签页（0 专注，1 表情，2 音乐，3 设置）。
     pub fn set_tab(&self, tab: i32) {
         self.window.set_tab(tab);
@@ -157,14 +178,17 @@ impl Console {
                 next.accessory_expressions.iter().map(push::chip),
             );
         }
-        if prev.event_columns != next.event_columns {
+        if prev.editor != next.editor {
+            store.set_editor(editor::push_editor(&next.editor));
+        }
+        if prev.editor_rows != next.editor_rows {
             sync(
-                &m.event_columns,
-                next.event_columns.iter().map(SharedString::from),
+                &m.editor_rows,
+                next.editor_rows.iter().map(editor::push_row),
             );
         }
-        if prev.event_rows != next.event_rows {
-            sync(&m.event_rows, next.event_rows.iter().map(push::event_row));
+        if prev.editor_draft != next.editor_draft {
+            store.set_editor_draft(editor::push_draft(&next.editor_draft));
         }
         if prev.devices != next.devices {
             sync(&m.devices, next.devices.iter().map(SharedString::from));
@@ -178,10 +202,10 @@ impl Console {
                 next.characters.iter().map(SharedString::from),
             );
         }
-        if prev.theme_presets != next.theme_presets {
+        if prev.accent_presets != next.accent_presets {
             sync(
-                &m.theme_presets,
-                next.theme_presets.iter().map(push::theme_preset),
+                &m.accent_presets,
+                next.accent_presets.iter().map(push::accent_preset),
             );
         }
         if prev.shortcuts != next.shortcuts {

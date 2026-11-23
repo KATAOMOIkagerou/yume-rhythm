@@ -1,11 +1,13 @@
 use super::*;
 use yume_core::command::{
-    AudioCommand, CharacterCommand, ExpressionCommand, SettingsCommand, StudyCommand, TodoCommand,
+    AudioCommand, CharacterCommand, EditorCommand, ExpressionCommand, SettingsCommand,
+    StudyCommand, TodoCommand,
 };
 use yume_core::model::audio::{AudioDevice, Telemetry};
+use yume_core::model::events::RandomEvent;
 use yume_core::model::expression::{ExpressionMeta, NEUTRAL};
 use yume_core::model::shortcuts::ShortcutAction;
-use yume_core::model::theme::ThemePreset;
+use yume_core::model::theme::{AccentPreset, BackgroundMode};
 use yume_core::model::todo_md::TodoMdError;
 use yume_core::{Command, Ctx, SplitMix64, update};
 
@@ -29,6 +31,7 @@ impl World {
             event,
             duration_ms: 3200,
             random: true,
+            ..Default::default()
         };
         w.send(Command::Character(CharacterCommand::Loaded {
             id: "sakura".into(),
@@ -49,6 +52,8 @@ impl World {
                     Some(RandomEvent::Doze),
                 ),
             ],
+            canvas: (800, 800),
+            custom_warning: None,
         }));
         w
     }
@@ -177,13 +182,18 @@ fn device_index_follows_setting() {
 }
 
 #[test]
-fn event_matrix_locks_music_doze() {
-    let v = World::new().view();
-    assert_eq!(v.event_columns, ["休闲", "自习", "听歌"]);
-    let doze = &v.event_rows[0];
-    assert_eq!(doze.name, "打瞌睡");
-    assert!(doze.cells[0].on && doze.cells[0].editable);
-    assert!(!doze.cells[2].on && !doze.cells[2].editable);
+fn editor_draft_projects_builtin_and_doze_lock() {
+    let mut w = World::new();
+    w.send(Command::Editor(EditorCommand::Open));
+    w.send(Command::Editor(EditorCommand::EditExisting("doze".into())));
+    let v = w.view();
+    assert!(v.editor.open);
+    assert!(v.editor_draft.active);
+    assert!(v.editor_draft.builtin);
+    assert!(v.editor_draft.music_locked);
+    assert!(!v.editor_draft.music);
+    assert_eq!(v.editor_draft.duration_s, 3);
+    assert!(v.editor.canvas_hint.contains("800×800"));
 }
 
 #[test]
@@ -199,8 +209,11 @@ fn todo_counts() {
 #[test]
 fn appearance_shortcuts_fonts_and_md_project_cleanly() {
     let mut w = World::new();
-    w.send(Command::Settings(SettingsCommand::SetTheme(
-        ThemePreset::Night,
+    w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
+        BackgroundMode::Dark,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetAccent(
+        AccentPreset::Sky,
     )));
     w.send(Command::Settings(SettingsCommand::SetPetOpacity(0.6)));
     w.send(Command::Settings(SettingsCommand::SetConsoleOpacity(0.85)));
@@ -221,7 +234,8 @@ fn appearance_shortcuts_fonts_and_md_project_cleanly() {
     w.send(Command::Todo(TodoCommand::MdFailed(TodoMdError::NotFound)));
 
     let v = w.view();
-    assert!(v.theme_presets.iter().any(|p| p.key == "night" && p.active));
+    assert_eq!(v.settings.background_index, 1);
+    assert!(v.accent_presets.iter().any(|p| p.key == "sky" && p.active));
     assert_eq!(v.settings.pet_opacity_text, "60%");
     assert_eq!(v.settings.console_opacity_text, "85%");
     assert_eq!(v.settings.font_index, 2);

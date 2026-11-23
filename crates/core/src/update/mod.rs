@@ -5,6 +5,7 @@
 
 mod audio;
 mod character;
+mod editor;
 mod expression;
 mod pet;
 mod settings;
@@ -13,10 +14,13 @@ mod todo;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_editor;
 
 use crate::clock::{Ctx, WallMs};
 use crate::command::Command;
 use crate::effect::Effect;
+use crate::model::expr_rules::resolve_catalog;
 use crate::model::expression::{Expressions, Situation};
 use crate::state::AppState;
 
@@ -40,6 +44,9 @@ pub fn update(state: &mut AppState, command: Command, ctx: &mut Ctx<'_>) -> Vec<
             if let Some(path) = state.settings.todo_md_path.clone() {
                 fx.push(Effect::LoadTodoMd { path });
             }
+            if let Some(path) = state.settings.background_image.clone() {
+                fx.push(Effect::ApplyBackgroundImage { path: Some(path) });
+            }
         }
         Command::Tick => {
             study::tick(state, now, &mut fx);
@@ -48,6 +55,7 @@ pub fn update(state: &mut AppState, command: Command, ctx: &mut Ctx<'_>) -> Vec<
         }
         Command::Study(c) => study::handle(state, c, now, &mut fx),
         Command::Expression(c) => expression::handle(state, c),
+        Command::Editor(c) => editor::handle(state, c, &mut fx),
         Command::Todo(c) => todo::handle(state, c, &mut fx),
         Command::Audio(c) => audio::handle(state, c, now, &mut fx),
         Command::Settings(c) => settings::handle(state, c, now, &mut fx),
@@ -58,12 +66,22 @@ pub fn update(state: &mut AppState, command: Command, ctx: &mut Ctx<'_>) -> Vec<
     fx
 }
 
+/// 根据当前角色原始表情目录与用户条件规则重新生成生效目录。
+pub(super) fn apply_rules(state: &mut AppState) {
+    let resolved = resolve_catalog(
+        &state.raw_catalog,
+        &state.settings.character,
+        &state.expression_rules,
+        &state.switches,
+    );
+    state.expressions.set_catalog(resolved);
+}
+
 /// 同时借出表情（可变）与判断条件（只读），两者是不同字段，互不冲突。
-fn split_expressions(state: &mut AppState) -> (&mut Expressions, Situation<'_>) {
+fn split_expressions(state: &mut AppState) -> (&mut Expressions, Situation) {
     let situation = Situation {
         activity: state.activity,
         music: state.audio.is_running(),
-        switches: &state.switches,
     };
     (&mut state.expressions, situation)
 }

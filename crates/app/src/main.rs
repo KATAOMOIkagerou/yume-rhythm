@@ -13,6 +13,8 @@ mod beat;
 mod characters;
 mod clock;
 #[cfg(windows)]
+mod custom_expr;
+#[cfg(windows)]
 mod io_tasks;
 mod logging;
 #[cfg(windows)]
@@ -110,7 +112,7 @@ fn run() -> anyhow::Result<()> {
     let roots = characters::roots(roaming.as_deref());
     log::info!("角色目录：{roots:?}");
     app::install(app::App::new(
-        state, console, links, roots, state_file, first_run,
+        state, console, links, roots, roaming, state_file, first_run,
     ));
     let _timers = shell::timers();
 

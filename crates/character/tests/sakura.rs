@@ -31,7 +31,7 @@ fn root() -> PathBuf {
 }
 
 fn load() -> Pack {
-    Pack::load(&Dir(root().join("characters/sakura")), "sakura").expect("内置角色包应能加载")
+    Pack::load(&Dir(root().join("characters/sakura")), "sakura", None).expect("内置角色包应能加载")
 }
 
 fn scene() -> PetScene {

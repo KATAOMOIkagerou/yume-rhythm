@@ -6,6 +6,7 @@
 use crate::beat::BeatControl;
 use crate::characters;
 use crate::clock;
+use crate::custom_expr;
 use crate::io_tasks;
 use crate::pet::PetControl;
 use crate::shell;
@@ -79,7 +80,9 @@ pub struct App {
     console: Console,
     links: Links,
     roots: Vec<PathBuf>,
+    user_dir: Option<PathBuf>,
     state_file: Option<PathBuf>,
+    current_canvas: (u32, u32),
     saved: Persisted,
     saved_md_seq: u64,
     save_timer: slint::Timer,
@@ -105,6 +108,8 @@ struct Applied {
 struct LoadedCharacter {
     name: String,
     expressions: Vec<yume_core::model::expression::ExpressionMeta>,
+    canvas: (u32, u32),
+    custom_warning: Option<String>,
     renderer: Box<dyn CharacterRenderer>,
 }
 
@@ -115,6 +120,7 @@ impl App {
         console: Console,
         links: Links,
         roots: Vec<PathBuf>,
+        user_dir: Option<PathBuf>,
         state_file: Option<PathBuf>,
         first_run: bool,
     ) -> Self {
@@ -130,7 +136,9 @@ impl App {
             console,
             links,
             roots,
+            user_dir,
             state_file,
+            current_canvas: (800, 800),
             saved,
             saved_md_seq: 0,
             save_timer: slint::Timer::default(),
@@ -231,6 +239,39 @@ impl App {
                 let fonts = yume_console::fonts::list_system_fonts();
                 dispatch(Command::Settings(SettingsCommand::FontsListed(fonts)));
             }
+            Effect::PickBackgroundImage => {
+                let owner = self.console.native_handle();
+                let user_dir = self.user_dir.clone();
+                slint::Timer::single_shot(Duration::ZERO, move || {
+                    if let Some(cmd) = io_tasks::pick_background_image(owner, user_dir.as_deref()) {
+                        dispatch(cmd);
+                    }
+                });
+            }
+            Effect::ApplyBackgroundImage { path } => {
+                if let Err(msg) = self.console.set_background_image(path.as_deref()) {
+                    dispatch(Command::Settings(SettingsCommand::BackgroundImageFailed(
+                        msg,
+                    )));
+                }
+            }
+            Effect::PickExpressionAsset { slot } => {
+                let owner = self.console.native_handle();
+                let canvas = self.current_canvas;
+                slint::Timer::single_shot(Duration::ZERO, move || {
+                    if let Some(cmd) = custom_expr::pick_asset(owner, slot, canvas) {
+                        dispatch(cmd);
+                    }
+                });
+            }
+            Effect::SaveCustomExpression(spec) => {
+                let custom = characters::custom_root(self.user_dir.as_deref());
+                custom_expr::save_and_dispatch(custom.as_deref(), &spec, dispatch);
+            }
+            Effect::DeleteCustomExpression { character, id } => {
+                let custom = characters::custom_root(self.user_dir.as_deref());
+                custom_expr::delete_and_dispatch(custom.as_deref(), &character, &id, dispatch);
+            }
             // 要等这次同步把窗口显示出来之后才能带到前面，见 `handle`。
             Effect::FocusConsole => self.focus_console = true,
             Effect::Quit => self.quitting = true,
@@ -240,14 +281,20 @@ impl App {
     /// 在后台线程读图、建渲染器，完成后回到主线程交给桌宠。
     fn load_character(&mut self, id: String) {
         let roots = self.roots.clone();
+        let custom_root = characters::custom_root(self.user_dir.as_deref());
         let seed = clock::seed();
         let spawned = std::thread::Builder::new()
             .name("load-character".into())
             .spawn(move || {
-                let result = characters::load(&roots, &id).map(|pack| LoadedCharacter {
-                    name: pack.manifest.name.clone(),
-                    expressions: pack.expression_meta(),
-                    renderer: Box::new(LayeredCharacter::new(pack, seed)),
+                let result = characters::load(&roots, custom_root.as_deref(), &id).map(|pack| {
+                    let canvas = (pack.manifest.canvas.width, pack.manifest.canvas.height);
+                    LoadedCharacter {
+                        name: pack.manifest.name.clone(),
+                        expressions: pack.expression_meta(),
+                        canvas,
+                        custom_warning: pack.custom_warning.clone(),
+                        renderer: Box::new(LayeredCharacter::new(pack, seed)),
+                    }
                 });
                 let posted = slint::invoke_from_event_loop(move || {
                     let mut report = None;
@@ -266,10 +313,11 @@ impl App {
     }
 
     /// 只有仍是当前角色时才交给桌宠，避免快速切换时旧结果覆盖新角色。
-    fn accept_character(&self, id: String, result: Result<LoadedCharacter, String>) -> Command {
+    fn accept_character(&mut self, id: String, result: Result<LoadedCharacter, String>) -> Command {
         match result {
             Ok(loaded) => {
                 if self.state.settings().character == id {
+                    self.current_canvas = loaded.canvas;
                     let _ = self.links.pet.send(PetControl::Character(loaded.renderer));
                 }
                 log::info!("角色已加载：{id}");
@@ -277,6 +325,8 @@ impl App {
                     id,
                     name: loaded.name,
                     expressions: loaded.expressions,
+                    canvas: loaded.canvas,
+                    custom_warning: loaded.custom_warning,
                 })
             }
             Err(message) => {

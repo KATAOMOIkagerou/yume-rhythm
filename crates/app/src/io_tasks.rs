@@ -96,3 +96,48 @@ fn sanitize_filename(name: &str) -> String {
         .take(40)
         .collect()
 }
+
+/// 选择并复制控制台背景图片到 `%APPDATA%\韵梦桌伴\background.<ext>`。
+#[must_use]
+pub fn pick_background_image(owner: Option<isize>, user_dir: Option<&Path>) -> Option<Command> {
+    let src = yume_win::pick_open_file(
+        owner,
+        "选择控制台背景图片",
+        "图片 (*.png;*.jpg;*.jpeg)",
+        "*.png;*.jpg;*.jpeg",
+    )?;
+    let ext = src
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(str::to_ascii_lowercase)
+        .filter(|e| matches!(e.as_str(), "png" | "jpg" | "jpeg"));
+    let Some(ext) = ext else {
+        return Some(Command::Settings(SettingsCommand::BackgroundImageFailed(
+            "仅支持 PNG 或 JPG 图片".into(),
+        )));
+    };
+    let dest = if let Some(dir) = user_dir {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            return Some(Command::Settings(SettingsCommand::BackgroundImageFailed(
+                format!("创建数据目录失败：{e}"),
+            )));
+        }
+        for old in ["png", "jpg", "jpeg"] {
+            let _ = std::fs::remove_file(dir.join(format!("background.{old}")));
+        }
+        let dest = dir.join(format!("background.{ext}"));
+        if src != dest
+            && let Err(e) = std::fs::copy(&src, &dest)
+        {
+            return Some(Command::Settings(SettingsCommand::BackgroundImageFailed(
+                format!("复制背景图片失败：{e}"),
+            )));
+        }
+        dest
+    } else {
+        src
+    };
+    Some(Command::Settings(SettingsCommand::BackgroundImageLoaded {
+        path: dest.to_string_lossy().into_owned(),
+    }))
+}

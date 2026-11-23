@@ -4,6 +4,7 @@
 //! 不用 Effect，由组装层比较 `derive` 中的派生值前后差异后应用，这样不会漏发。
 
 use crate::model::audio::{AudioSource, TempoShift};
+use crate::model::editor::{AssetSlot, CustomExpressionSpec};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Effect {
@@ -40,6 +41,23 @@ pub enum Effect {
     },
     /// 枚举系统已安装字体。
     ListFonts,
+    /// 弹出文件选择框导入控制台背景图片。
+    PickBackgroundImage,
+    /// 将选定的背景图片设置到控制台窗口，`None` 表示清除。
+    ApplyBackgroundImage {
+        path: Option<String>,
+    },
+    /// 弹出 PNG 选择框导入自定义表情某个槽位的素材。
+    PickExpressionAsset {
+        slot: AssetSlot,
+    },
+    /// 复制 PNG 并写出 `expressions.json`。
+    SaveCustomExpression(CustomExpressionSpec),
+    /// 删除自定义表情及其 PNG 文件。
+    DeleteCustomExpression {
+        character: String,
+        id: String,
+    },
     /// 把控制台窗口带到最前面。显示控制台的命令都会附带它：窗口已经可见但被挡住时也要能看到。
     FocusConsole,
     Quit,

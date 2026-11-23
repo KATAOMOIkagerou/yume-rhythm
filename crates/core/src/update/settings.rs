@@ -4,10 +4,11 @@ use crate::clock::WallMs;
 use crate::command::{AudioCommand, PetCommand, SettingsCommand};
 use crate::effect::Effect;
 use crate::model::settings::{
-    clamp_console_opacity, clamp_pet_opacity, clamp_pet_scale, clamp_random_interval,
+    clamp_background_dim, clamp_console_opacity, clamp_pet_opacity, clamp_pet_scale,
+    clamp_random_interval,
 };
 use crate::model::shortcuts::{ShortcutAction, Shortcuts};
-use crate::model::theme::normalize_hex_color;
+use crate::model::theme::{BackgroundMode, normalize_hex_color};
 use crate::state::AppState;
 use crate::update::{audio, pet};
 
@@ -29,8 +30,33 @@ pub(super) fn handle(
         SettingsCommand::SetAutostart(on) => state.settings.autostart = on,
         SettingsCommand::ToggleAutostart => state.settings.autostart = !state.settings.autostart,
         SettingsCommand::SetHideOnFullscreen(on) => state.settings.hide_on_fullscreen = on,
-        SettingsCommand::SetTheme(preset) => {
-            state.settings.theme = preset;
+        SettingsCommand::SetBackgroundMode(mode) => {
+            state.settings.background = mode;
+            state.bg_error = false;
+        }
+        SettingsCommand::SetCustomBackground(raw) => match raw {
+            None => {
+                state.settings.custom_background = None;
+                state.bg_error = false;
+            }
+            Some(text) if text.trim().is_empty() => {
+                state.settings.custom_background = None;
+                state.bg_error = false;
+            }
+            Some(text) => match normalize_hex_color(&text) {
+                Some(hex) => {
+                    state.settings.custom_background = Some(hex);
+                    state.settings.background = BackgroundMode::Custom;
+                    state.bg_error = false;
+                }
+                None => {
+                    state.bg_error = true;
+                }
+            },
+        },
+        SettingsCommand::SetAccent(preset) => {
+            state.settings.accent = preset;
+            state.settings.custom_accent = None;
             state.accent_error = false;
         }
         SettingsCommand::SetCustomAccent(raw) => match raw {
@@ -52,6 +78,27 @@ pub(super) fn handle(
                 }
             },
         },
+        SettingsCommand::PickBackgroundImage => {
+            state.bg_image_error = None;
+            fx.push(Effect::PickBackgroundImage);
+        }
+        SettingsCommand::BackgroundImageLoaded { path } => {
+            state.settings.background_image = Some(path.clone());
+            state.bg_image_error = None;
+            fx.push(Effect::ApplyBackgroundImage { path: Some(path) });
+        }
+        SettingsCommand::BackgroundImageFailed(msg) => {
+            state.bg_image_error = Some(msg);
+            state.settings.background_image = None;
+        }
+        SettingsCommand::ClearBackgroundImage => {
+            state.settings.background_image = None;
+            state.bg_image_error = None;
+            fx.push(Effect::ApplyBackgroundImage { path: None });
+        }
+        SettingsCommand::SetBackgroundDim(dim) => {
+            state.settings.background_dim = clamp_background_dim(dim);
+        }
         SettingsCommand::SetConsoleOpacity(opacity) => {
             state.settings.console_opacity = clamp_console_opacity(opacity);
         }

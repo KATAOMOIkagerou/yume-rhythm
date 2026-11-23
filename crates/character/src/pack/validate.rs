@@ -119,6 +119,50 @@ pub fn check_expressions(list: &[ExpressionDef]) -> Result<(), String> {
     Ok(())
 }
 
+/// 校验用户自定义表情列表（与主包表情不重复，且各自满足资源完整度要求）。
+///
+/// # Errors
+/// 返回第一条不满足的规则。
+pub fn check_custom_expressions(
+    custom: &[ExpressionDef],
+    builtin: &[ExpressionDef],
+) -> Result<(), String> {
+    for (i, e) in custom.iter().enumerate() {
+        if e.id.is_empty() {
+            return Err(format!("第 {} 个自定义表情缺少 id", i + 1));
+        }
+        if builtin.iter().any(|b| b.id == e.id) {
+            return Err(format!("自定义表情 id「{}」与内置表情重复", e.id));
+        }
+        if custom[..i].iter().any(|other| other.id == e.id) {
+            return Err(format!("自定义表情 id「{}」重复", e.id));
+        }
+        if !(DURATION_MIN_MS..=DURATION_MAX_MS).contains(&e.duration_ms) {
+            return Err(format!(
+                "自定义表情「{}」的 durationMs 必须在 {DURATION_MIN_MS}–{DURATION_MAX_MS} 之间",
+                e.id
+            ));
+        }
+        let r = &e.resources;
+        match e.kind {
+            KindDef::Base => {
+                if r.eyes.is_none() || r.mouth.is_none() {
+                    return Err(format!("自定义一级表情「{}」缺少眼睛或嘴巴素材", e.name));
+                }
+            }
+            KindDef::Accessory => {
+                if r.eyes.is_none() && r.mouth.is_none() && r.overlay.is_none() {
+                    return Err(format!("自定义二级表情「{}」至少需要一张素材", e.name));
+                }
+            }
+        }
+        for file in r.files() {
+            check_path(file)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
