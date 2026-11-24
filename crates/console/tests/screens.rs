@@ -25,7 +25,7 @@ use yume_core::model::audio::{AudioDevice, AudioError, Telemetry};
 use yume_core::model::events::RandomEvent;
 use yume_core::model::expression::{ExpressionKind, ExpressionMeta};
 use yume_core::model::pet::CharacterInfo;
-use yume_core::model::theme::{AccentPreset, BackgroundMode};
+use yume_core::model::theme::{AccentPreset, BackgroundMode, CornerMode};
 use yume_core::{AppState, Command, Ctx, SplitMix64, WallMs, update};
 
 const SCALE: f32 = 1.5;
@@ -108,6 +108,10 @@ impl World {
 }
 
 fn shoot(name: &str, world: &World, tab: i32) {
+    shoot_sized(name, world, tab, SIZE);
+}
+
+fn shoot_sized(name: &str, world: &World, tab: i32, size: (u32, u32)) {
     let console = Console::new(Rc::new(|_| {})).expect("创建控制台");
     console.set_font_family("Noto Sans CJK SC");
     console.set_tab(tab);
@@ -122,8 +126,8 @@ fn shoot(name: &str, world: &World, tab: i32) {
         reason = "截图尺寸"
     )]
     let (w, h) = (
-        (SIZE.0 as f32 * SCALE) as u32,
-        (SIZE.1 as f32 * SCALE) as u32,
+        (size.0 as f32 * SCALE) as u32,
+        (size.1 as f32 * SCALE) as u32,
     );
     window.set_size(PhysicalSize::new(w, h));
     console.window().show().expect("显示");
@@ -224,8 +228,35 @@ fn render_every_page() {
     shoot("settings_dark", &w, 3);
 
     w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
+        BackgroundMode::Custom,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetAccent(
+        AccentPreset::Custom,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetCustomAccent(Some(
+        "#55ccaa".into(),
+    ))));
+    w.send(Command::Settings(SettingsCommand::SetCornerMode(
+        CornerMode::Off,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetFontSize(15)));
+    shoot("settings_v031_custom", &w, 3);
+
+    w.send(Command::Settings(SettingsCommand::SetCornerMode(
+        CornerMode::Custom,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetCustomCornerRadius(
+        20,
+    )));
+    shoot_sized("settings_v031_full", &w, 3, (400, 1280));
+
+    w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
         BackgroundMode::Light,
     )));
+    w.send(Command::Settings(SettingsCommand::SetCornerMode(
+        CornerMode::Round,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetFontSize(13)));
     w.send(Command::Editor(EditorCommand::Open));
     shoot("editor_list", &w, 1);
 

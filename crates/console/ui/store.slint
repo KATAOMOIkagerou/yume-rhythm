@@ -134,19 +134,29 @@ export struct SettingsView {
     pet-opacity-text: string,
     console-opacity: float,
     console-opacity-text: string,
+    bg-opacity: float,
+    bg-opacity-text: string,
+    card-opacity: float,
+    card-opacity-text: string,
     background-index: int,
     custom-background: string,
     bg-error: bool,
-    accent-custom-active: bool,
+    accent-custom-open: bool,
     custom-accent: string,
     accent-error: bool,
+    corner-index: int,
+    corner-radius: int,
+    corner-radius-text: string,
     has-bg-image: bool,
     bg-image-name: string,
     bg-dim: float,
     bg-dim-text: string,
     bg-image-error: string,
     shortcut-error: string,
-    font-index: int,
+    zh-font-index: int,
+    en-font-index: int,
+    font-size: int,
+    font-size-text: string,
     font-status: string,
     font-failed: bool,
     locked: bool,
@@ -175,7 +185,8 @@ export global Store {
     in property <[string]> characters;
     in property <[AccentOption]> accent-presets;
     in property <[ShortcutItem]> shortcuts;
-    in property <[string]> fonts;
+    in property <[string]> zh-fonts;
+    in property <[string]> en-fonts;
     // 当前正在录制快捷键时置为 true，避免顶层窗口快捷键误触发。
     in-out property <bool> recording-shortcut: false;
     // 0 无，1 确认暂停，2 确认离开自习，3 鼓励
@@ -232,16 +243,20 @@ export global Store {
     callback set-show-bpm(bool);
     callback set-auto-follow(bool);
 
-    // 设置：背景/强调色、透明度、字体、快捷键、通用
+    // 设置：背景/透明度/强调色/圆角、字体/字号、快捷键、通用
     callback set-end-sound(bool);
     callback set-pet-scale(float);
     callback set-pet-opacity(float);
     callback set-console-opacity(float);
+    callback set-bg-opacity(float);
+    callback set-card-opacity(float);
     callback set-background-mode(string);
     callback set-custom-background(string);
     callback set-accent(string);
     callback set-custom-accent(string);
     callback clear-custom-accent();
+    callback set-corner-mode(string);
+    callback set-corner-radius(int);
     callback pick-background-image();
     callback clear-background-image();
     callback set-background-dim(float);
@@ -249,7 +264,9 @@ export global Store {
     callback clear-shortcut(string /* action id */);
     callback reset-shortcuts();
     callback console-key-pressed(bool /* ctrl */, bool /* alt */, bool /* shift */, string /* text */) -> bool;
-    callback select-font(int);
+    callback select-zh-font(int);
+    callback select-en-font(int);
+    callback set-font-size(int);
     callback pick-custom-font();
     callback reset-font();
     callback set-locked(bool);

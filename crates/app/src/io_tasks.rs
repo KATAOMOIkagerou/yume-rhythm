@@ -76,11 +76,12 @@ pub fn load_custom_font(path: &str) -> Command {
         }
     };
     match yume_console::fonts::register_font_bytes(bytes) {
-        Some(family) => {
-            log::info!("已加载外部字体：{family}（{path}）");
+        Some(reg) => {
+            log::info!("已加载外部字体：{}（{}）", reg.family, path);
             Command::Settings(SettingsCommand::CustomFontLoaded {
                 path: path.to_owned(),
-                family,
+                family: reg.family,
+                has_cjk: reg.has_cjk,
             })
         }
         None => Command::Settings(SettingsCommand::CustomFontFailed(

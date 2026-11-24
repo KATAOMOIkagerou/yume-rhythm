@@ -7,7 +7,7 @@ use yume_core::model::audio::{AudioDevice, Telemetry};
 use yume_core::model::events::RandomEvent;
 use yume_core::model::expression::{ExpressionMeta, NEUTRAL};
 use yume_core::model::shortcuts::ShortcutAction;
-use yume_core::model::theme::{AccentPreset, BackgroundMode};
+use yume_core::model::theme::{AccentPreset, BackgroundMode, CornerMode};
 use yume_core::model::todo_md::TodoMdError;
 use yume_core::{Command, Ctx, SplitMix64, update};
 
@@ -212,8 +212,16 @@ fn appearance_shortcuts_fonts_and_md_project_cleanly() {
     w.send(Command::Settings(SettingsCommand::SetBackgroundMode(
         BackgroundMode::Dark,
     )));
+    w.send(Command::Settings(SettingsCommand::SetBgOpacity(0.8)));
+    w.send(Command::Settings(SettingsCommand::SetCardOpacity(0.5)));
     w.send(Command::Settings(SettingsCommand::SetAccent(
         AccentPreset::Sky,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetCornerMode(
+        CornerMode::Custom,
+    )));
+    w.send(Command::Settings(SettingsCommand::SetCustomCornerRadius(
+        20,
     )));
     w.send(Command::Settings(SettingsCommand::SetPetOpacity(0.6)));
     w.send(Command::Settings(SettingsCommand::SetConsoleOpacity(0.85)));
@@ -221,9 +229,13 @@ fn appearance_shortcuts_fonts_and_md_project_cleanly() {
         "微软雅黑".into(),
         "Consolas".into(),
     ])));
-    w.send(Command::Settings(SettingsCommand::SetFontFamily(Some(
+    w.send(Command::Settings(SettingsCommand::SetZhFontFamily(Some(
+        "微软雅黑".into(),
+    ))));
+    w.send(Command::Settings(SettingsCommand::SetEnFontFamily(Some(
         "Consolas".into(),
     ))));
+    w.send(Command::Settings(SettingsCommand::SetFontSize(16)));
     w.send(Command::Settings(SettingsCommand::GlobalHotkeysFailed(
         vec![ShortcutAction::GlobalToggleConsole],
     )));
@@ -235,13 +247,36 @@ fn appearance_shortcuts_fonts_and_md_project_cleanly() {
 
     let v = w.view();
     assert_eq!(v.settings.background_index, 1);
+    assert_eq!(v.settings.bg_opacity_text, "80%");
+    assert_eq!(v.settings.card_opacity_text, "50%");
+    assert_eq!(v.accent_presets.len(), 6);
     assert!(v.accent_presets.iter().any(|p| p.key == "sky" && p.active));
+    assert!(!v.settings.accent_custom_open);
+    assert_eq!(v.settings.corner_index, 2);
+    assert_eq!(v.settings.corner_radius, 20);
     assert_eq!(v.settings.pet_opacity_text, "60%");
     assert_eq!(v.settings.console_opacity_text, "85%");
-    assert_eq!(v.settings.font_index, 2);
-    assert_eq!(v.font_family, "Consolas");
+    assert!(v.settings.zh_font_index > 0);
+    assert_eq!(v.settings.en_font_index, 1);
+    assert_eq!(v.settings.font_size, 16);
+    assert_eq!(
+        v.font_pair,
+        (Some("Consolas".to_owned()), Some("微软雅黑".to_owned()))
+    );
     assert!(v.shortcuts[0].failed);
     assert!(v.todo.md_bound);
     assert!(v.todo.md_label.contains("plan.md"));
     assert!(!v.todo.md_error.is_empty());
+
+    w.send(Command::Settings(SettingsCommand::SetAccent(
+        AccentPreset::Custom,
+    )));
+    let custom_open = w.view();
+    assert!(custom_open.settings.accent_custom_open);
+    assert!(
+        custom_open
+            .accent_presets
+            .iter()
+            .any(|p| p.key == "custom" && p.active)
+    );
 }

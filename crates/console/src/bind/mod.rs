@@ -6,6 +6,7 @@ mod callbacks;
 mod editor;
 mod push;
 
+use crate::fonts::apply_font_stack;
 use crate::ui::{self, ConsoleWindow, Store, Theme};
 use crate::view::{self, View};
 use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, SharedString, VecModel};
@@ -32,7 +33,8 @@ struct Models {
     characters: Rc<VecModel<SharedString>>,
     accent_presets: Rc<VecModel<ui::AccentOption>>,
     shortcuts: Rc<VecModel<ui::ShortcutItem>>,
-    fonts: Rc<VecModel<SharedString>>,
+    zh_fonts: Rc<VecModel<SharedString>>,
+    en_fonts: Rc<VecModel<SharedString>>,
 }
 
 impl Console {
@@ -51,7 +53,8 @@ impl Console {
             characters: Rc::new(VecModel::default()),
             accent_presets: Rc::new(VecModel::default()),
             shortcuts: Rc::new(VecModel::default()),
-            fonts: Rc::new(VecModel::default()),
+            zh_fonts: Rc::new(VecModel::default()),
+            en_fonts: Rc::new(VecModel::default()),
         };
         let store = window.global::<Store>();
         store.set_todo_items(ModelRc::from(models.todo_items.clone()));
@@ -62,7 +65,8 @@ impl Console {
         store.set_characters(ModelRc::from(models.characters.clone()));
         store.set_accent_presets(ModelRc::from(models.accent_presets.clone()));
         store.set_shortcuts(ModelRc::from(models.shortcuts.clone()));
-        store.set_fonts(ModelRc::from(models.fonts.clone()));
+        store.set_zh_fonts(ModelRc::from(models.zh_fonts.clone()));
+        store.set_en_fonts(ModelRc::from(models.en_fonts.clone()));
 
         let shown = Rc::new(RefCell::new(None));
         callbacks::wire(&store, &dispatch, &shown);
@@ -141,6 +145,7 @@ impl Console {
     /// 按当前状态刷新界面。
     pub fn render(&self, state: &AppState, now: WallMs) {
         let next = view::project(state, now);
+        let first_render = self.shown.borrow().is_none();
         let prev = self.shown.borrow_mut().take().unwrap_or_default();
         let store = self.window.global::<Store>();
         let theme = self.window.global::<Theme>();
@@ -151,8 +156,18 @@ impl Console {
         {
             push::apply_palette(&theme, palette);
         }
-        if prev.font_family != next.font_family && !next.font_family.is_empty() {
-            theme.set_font_family(next.font_family.as_str().into());
+        if prev.radii != next.radii
+            && let Some(radii) = next.radii
+        {
+            push::apply_radii(&theme, radii);
+        }
+        if (first_render || prev.font_size != next.font_size) && next.font_size > 0 {
+            push::apply_font_size(&theme, next.font_size);
+        }
+        if first_render || prev.font_pair != next.font_pair {
+            let stack_id =
+                apply_font_stack(next.font_pair.0.as_deref(), next.font_pair.1.as_deref());
+            theme.set_font_family(stack_id.into());
         }
         if prev.header != next.header {
             store.set_header(push::header(&next));
@@ -211,8 +226,11 @@ impl Console {
         if prev.shortcuts != next.shortcuts {
             sync(&m.shortcuts, next.shortcuts.iter().map(push::shortcut_item));
         }
-        if prev.fonts != next.fonts {
-            sync(&m.fonts, next.fonts.iter().map(SharedString::from));
+        if prev.zh_fonts != next.zh_fonts {
+            sync(&m.zh_fonts, next.zh_fonts.iter().map(SharedString::from));
+        }
+        if prev.en_fonts != next.en_fonts {
+            sync(&m.en_fonts, next.en_fonts.iter().map(SharedString::from));
         }
         if prev.settings != next.settings {
             store.set_settings(push::settings(&next));

@@ -44,7 +44,7 @@ component ShortcutRowView inherits HorizontalLayout {
             key-box := Rectangle {
                 min-width: 96px;
                 height: 26px;
-                border-radius: 7px;
+                border-radius: min(7px, Theme.radius-small);
                 background: root.recording ? Theme.accent-soft
                     : ta.has-hover ? Theme.surface-hover : Theme.surface-alt;
                 border-width: 1px;

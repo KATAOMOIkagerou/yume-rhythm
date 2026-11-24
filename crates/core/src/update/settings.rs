@@ -4,11 +4,13 @@ use crate::clock::WallMs;
 use crate::command::{AudioCommand, PetCommand, SettingsCommand};
 use crate::effect::Effect;
 use crate::model::settings::{
-    clamp_background_dim, clamp_console_opacity, clamp_pet_opacity, clamp_pet_scale,
-    clamp_random_interval,
+    FONT_SIZE_DEFAULT, clamp_background_dim, clamp_console_opacity, clamp_element_opacity,
+    clamp_font_size, clamp_pet_opacity, clamp_pet_scale, clamp_random_interval,
 };
 use crate::model::shortcuts::{ShortcutAction, Shortcuts};
-use crate::model::theme::{BackgroundMode, normalize_hex_color};
+use crate::model::theme::{
+    AccentPreset, BackgroundMode, clamp_corner_radius, is_dark_background, normalize_hex_color,
+};
 use crate::state::AppState;
 use crate::update::{audio, pet};
 
@@ -31,7 +33,20 @@ pub(super) fn handle(
         SettingsCommand::ToggleAutostart => state.settings.autostart = !state.settings.autostart,
         SettingsCommand::SetHideOnFullscreen(on) => state.settings.hide_on_fullscreen = on,
         SettingsCommand::SetBackgroundMode(mode) => {
+            let prev_dark = is_dark_background(
+                state.settings.background,
+                state.settings.custom_background.as_deref(),
+                state.settings.custom_bg_dark,
+            );
             state.settings.background = mode;
+            if mode != BackgroundMode::Custom {
+                state.settings.custom_background = None;
+            }
+            state.settings.custom_bg_dark = match mode {
+                BackgroundMode::Light => false,
+                BackgroundMode::Dark => true,
+                BackgroundMode::Custom => prev_dark,
+            };
             state.bg_error = false;
         }
         SettingsCommand::SetCustomBackground(raw) => match raw {
@@ -45,6 +60,11 @@ pub(super) fn handle(
             }
             Some(text) => match normalize_hex_color(&text) {
                 Some(hex) => {
+                    state.settings.custom_bg_dark = is_dark_background(
+                        BackgroundMode::Custom,
+                        Some(&hex),
+                        state.settings.custom_bg_dark,
+                    );
                     state.settings.custom_background = Some(hex);
                     state.settings.background = BackgroundMode::Custom;
                     state.bg_error = false;
@@ -54,9 +74,17 @@ pub(super) fn handle(
                 }
             },
         },
+        SettingsCommand::SetBgOpacity(opacity) => {
+            state.settings.bg_opacity = clamp_element_opacity(opacity);
+        }
+        SettingsCommand::SetCardOpacity(opacity) => {
+            state.settings.card_opacity = clamp_element_opacity(opacity);
+        }
         SettingsCommand::SetAccent(preset) => {
             state.settings.accent = preset;
-            state.settings.custom_accent = None;
+            if preset != AccentPreset::Custom {
+                state.settings.last_preset_accent = preset;
+            }
             state.accent_error = false;
         }
         SettingsCommand::SetCustomAccent(raw) => match raw {
@@ -71,6 +99,7 @@ pub(super) fn handle(
             Some(text) => match normalize_hex_color(&text) {
                 Some(hex) => {
                     state.settings.custom_accent = Some(hex);
+                    state.settings.accent = AccentPreset::Custom;
                     state.accent_error = false;
                 }
                 None => {
@@ -78,6 +107,12 @@ pub(super) fn handle(
                 }
             },
         },
+        SettingsCommand::SetCornerMode(mode) => {
+            state.settings.corner_mode = mode;
+        }
+        SettingsCommand::SetCustomCornerRadius(px) => {
+            state.settings.custom_corner_radius = clamp_corner_radius(px);
+        }
         SettingsCommand::PickBackgroundImage => {
             state.bg_image_error = None;
             fx.push(Effect::PickBackgroundImage);
@@ -145,28 +180,44 @@ pub(super) fn handle(
                 }
             }
         }
-        SettingsCommand::SetFontFamily(family) => {
-            let cleaned = family
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty());
-            state.settings.font_family = cleaned;
+        SettingsCommand::SetZhFontFamily(family) => {
+            state.settings.zh_font_family = clean_font(family);
             state.font_error = None;
+        }
+        SettingsCommand::SetEnFontFamily(family) => {
+            state.settings.en_font_family = clean_font(family);
+            state.font_error = None;
+        }
+        SettingsCommand::SetFontSize(px) => {
+            state.settings.font_size = clamp_font_size(px);
         }
         SettingsCommand::PickCustomFont => {
             state.font_error = None;
             fx.push(Effect::PickFontFile);
         }
         SettingsCommand::ResetFont => {
-            state.settings.font_family = None;
-            state.settings.custom_font_path = None;
+            state.settings.zh_font_family = None;
+            state.settings.en_font_family = None;
+            state.settings.font_size = FONT_SIZE_DEFAULT;
+            state.settings.custom_font_paths.clear();
             state.font_error = None;
         }
         SettingsCommand::FontsListed(fonts) => {
             state.available_fonts = fonts;
         }
-        SettingsCommand::CustomFontLoaded { path, family } => {
-            state.settings.custom_font_path = Some(path);
-            state.settings.font_family = Some(family.clone());
+        SettingsCommand::CustomFontLoaded {
+            path,
+            family,
+            has_cjk,
+        } => {
+            if !state.settings.custom_font_paths.iter().any(|p| p == &path) {
+                state.settings.custom_font_paths.push(path);
+            }
+            if has_cjk {
+                state.settings.zh_font_family = Some(family.clone());
+            } else {
+                state.settings.en_font_family = Some(family.clone());
+            }
             if !state.available_fonts.iter().any(|f| f == &family) {
                 state.available_fonts.insert(0, family);
             }
@@ -176,4 +227,10 @@ pub(super) fn handle(
             state.font_error = Some(msg);
         }
     }
+}
+
+fn clean_font(family: Option<String>) -> Option<String> {
+    family
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
 }

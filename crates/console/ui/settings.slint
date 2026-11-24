@@ -5,7 +5,8 @@ import { Theme } from "theme.slint";
 import { ButtonKind, Card, Notice, PillButton, SettingRow } from "widgets.slint";
 import { RangeSlider, Toggle } from "controls.slint";
 import { Store } from "store.slint";
-import { AccentCard, BackgroundCard, OpacityCard } from "appearance.slint";
+import { AccentCard, BackgroundCard } from "appearance.slint";
+import { CornerCard, OpacityCard } from "window_style.slint";
 import { FontCard } from "font_card.slint";
 import { ShortcutsCard } from "shortcuts.slint";
 
@@ -81,6 +82,7 @@ export component SettingsPage inherits ScrollView {
 
         BackgroundCard { }
         AccentCard { }
+        CornerCard { }
         OpacityCard { }
         FontCard { }
 

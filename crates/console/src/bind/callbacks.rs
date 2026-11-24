@@ -13,7 +13,7 @@ use yume_core::command::{
 use yume_core::model::audio::TempoShift;
 use yume_core::model::events::ActivityMode;
 use yume_core::model::shortcuts::{ShortcutAction, format_recorded};
-use yume_core::model::theme::{AccentPreset, BackgroundMode};
+use yume_core::model::theme::{AccentPreset, BackgroundMode, CornerMode};
 use yume_core::model::timer::TimerMode;
 
 pub(super) fn wire(
@@ -212,6 +212,10 @@ fn wire_settings(
         )));
     });
     let d = dispatch.clone();
+    store.on_set_bg_opacity(move |o| d(Command::Settings(SettingsCommand::SetBgOpacity(o))));
+    let d = dispatch.clone();
+    store.on_set_card_opacity(move |o| d(Command::Settings(SettingsCommand::SetCardOpacity(o))));
+    let d = dispatch.clone();
     store.on_set_accent(move |key| {
         if let Some(preset) = AccentPreset::from_key(&key) {
             d(Command::Settings(SettingsCommand::SetAccent(preset)));
@@ -226,6 +230,18 @@ fn wire_settings(
     store.on_clear_custom_accent(send(dispatch, || {
         Command::Settings(SettingsCommand::SetCustomAccent(None))
     }));
+    let d = dispatch.clone();
+    store.on_set_corner_mode(move |key| {
+        if let Some(mode) = CornerMode::from_key(&key) {
+            d(Command::Settings(SettingsCommand::SetCornerMode(mode)));
+        }
+    });
+    let d = dispatch.clone();
+    store.on_set_corner_radius(move |px| {
+        d(Command::Settings(SettingsCommand::SetCustomCornerRadius(
+            i64::from(px),
+        )));
+    });
     store.on_pick_background_image(send(dispatch, || {
         Command::Settings(SettingsCommand::PickBackgroundImage)
     }));
@@ -281,15 +297,32 @@ fn wire_settings(
         matched
     });
     let w = with_view.clone();
-    store.on_select_font(move |index| {
+    store.on_select_zh_font(move |index| {
         w(&|v| {
             let family = usize::try_from(index)
                 .ok()
-                .and_then(|i| v.font_families.get(i))?;
-            Some(Command::Settings(SettingsCommand::SetFontFamily(
+                .and_then(|i| v.zh_font_families.get(i))?;
+            Some(Command::Settings(SettingsCommand::SetZhFontFamily(
                 family.clone(),
             )))
         });
+    });
+    let w = with_view.clone();
+    store.on_select_en_font(move |index| {
+        w(&|v| {
+            let family = usize::try_from(index)
+                .ok()
+                .and_then(|i| v.en_font_families.get(i))?;
+            Some(Command::Settings(SettingsCommand::SetEnFontFamily(
+                family.clone(),
+            )))
+        });
+    });
+    let d = dispatch.clone();
+    store.on_set_font_size(move |px| {
+        d(Command::Settings(SettingsCommand::SetFontSize(i64::from(
+            px,
+        ))))
     });
     store.on_pick_custom_font(send(dispatch, || {
         Command::Settings(SettingsCommand::PickCustomFont)

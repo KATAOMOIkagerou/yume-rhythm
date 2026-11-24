@@ -1,7 +1,7 @@
 //! 全局设置：默认值与取值范围集中在这里（功能清单第 11 节，以及重写新增项）。
 
 use crate::model::shortcuts::Shortcuts;
-use crate::model::theme::{AccentPreset, BackgroundMode};
+use crate::model::theme::{AccentPreset, BackgroundMode, CORNER_RADIUS_DEFAULT, CornerMode};
 use serde::{Deserialize, Serialize};
 
 pub const RANDOM_INTERVAL_MIN_S: u32 = 5;
@@ -11,12 +11,17 @@ pub const PET_SCALE_MIN: f32 = 0.5;
 pub const PET_SCALE_MAX: f32 = 2.0;
 pub const CONSOLE_OPACITY_MIN: f32 = 0.4;
 pub const PET_OPACITY_MIN: f32 = 0.3;
+pub const ELEMENT_OPACITY_MIN: f32 = 0.0;
 pub const OPACITY_MAX: f32 = 1.0;
 pub const BG_DIM_MIN: f32 = 0.2;
 pub const BG_DIM_MAX: f32 = 0.95;
 pub const BG_DIM_DEFAULT: f32 = 0.6;
+pub const FONT_SIZE_MIN: u32 = 11;
+pub const FONT_SIZE_MAX: u32 = 18;
+pub const FONT_SIZE_DEFAULT: u32 = 13;
 pub const DEFAULT_CHARACTER: &str = "sakura";
-pub const DEFAULT_FONT_FAMILY: &str = "Microsoft YaHei UI";
+pub const DEFAULT_ZH_FONT_FAMILY: &str = "Microsoft YaHei UI";
+pub const DEFAULT_EN_FONT_FAMILY: &str = "Segoe UI";
 
 /// 桌宠窗口位置，虚拟桌面物理像素。启动时若不在任何显示器上，由窗口层拉回可见区域。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,10 +56,21 @@ pub struct Settings {
     pub background: BackgroundMode,
     /// 可选自定义背景色（`#rrggbb`）。
     pub custom_background: Option<String>,
-    /// 控制台强调色预设。
+    /// 自定义背景未输入 HEX 时的深浅兜底：切换前若是深色则保持深色底。
+    pub custom_bg_dark: bool,
+    /// 控制台背景透明度，0.0–1.0。
+    pub bg_opacity: f32,
+    /// 控制台卡片透明度，0.0–1.0。
+    pub card_opacity: f32,
+    /// 控制台强调色预设（含「自定义」第 6 项）。
     pub accent: AccentPreset,
+    /// 切到「自定义」前或清除自定义色后兜底用的预设强调色。
+    pub last_preset_accent: AccentPreset,
     /// 可选自定义强调色（`#rrggbb`）。
     pub custom_accent: Option<String>,
+    /// 界面圆角模式与自定义圆角半径（px）。
+    pub corner_mode: CornerMode,
+    pub custom_corner_radius: u32,
     /// 控制台自定义背景图片路径。
     pub background_image: Option<String>,
     /// 背景图片之上的背景色遮罩浓度（0.2–0.95）。
@@ -65,10 +81,14 @@ pub struct Settings {
     pub pet_opacity: f32,
     /// 自定义快捷键。
     pub shortcuts: Shortcuts,
-    /// 界面字体家族名；`None` 表示默认（微软雅黑 UI）。
-    pub font_family: Option<String>,
-    /// 导入的本地 `.ttf`/`.otf` 字体文件路径（重启时自动加载）。
-    pub custom_font_path: Option<String>,
+    /// 中文字体家族名；`None` 表示默认（微软雅黑 UI）。
+    pub zh_font_family: Option<String>,
+    /// 英文字体家族名；`None` 表示默认（Segoe UI）。字形查找优先级高于中文字体。
+    pub en_font_family: Option<String>,
+    /// 正文字号（px，11–18，默认 13）。
+    pub font_size: u32,
+    /// 导入的本地 `.ttf`/`.otf`/`.ttc` 字体文件路径（重启时自动加载）。
+    pub custom_font_paths: Vec<String>,
     /// 外接 Markdown 待办清单文件路径；`None` 表示内置清单。
     pub todo_md_path: Option<String>,
 }
@@ -89,15 +109,23 @@ impl Default for Settings {
             character: DEFAULT_CHARACTER.into(),
             background: BackgroundMode::default(),
             custom_background: None,
-            accent: AccentPreset::default(),
+            custom_bg_dark: false,
+            bg_opacity: OPACITY_MAX,
+            card_opacity: OPACITY_MAX,
+            accent: AccentPreset::Sakura,
+            last_preset_accent: AccentPreset::Sakura,
             custom_accent: None,
+            corner_mode: CornerMode::default(),
+            custom_corner_radius: CORNER_RADIUS_DEFAULT,
             background_image: None,
             background_dim: BG_DIM_DEFAULT,
             console_opacity: OPACITY_MAX,
             pet_opacity: OPACITY_MAX,
             shortcuts: Shortcuts::default(),
-            font_family: None,
-            custom_font_path: None,
+            zh_font_family: None,
+            en_font_family: None,
+            font_size: FONT_SIZE_DEFAULT,
+            custom_font_paths: Vec::new(),
             todo_md_path: None,
         }
     }
@@ -133,6 +161,19 @@ pub fn clamp_console_opacity(opacity: f32) -> f32 {
 #[must_use]
 pub fn clamp_pet_opacity(opacity: f32) -> f32 {
     clamp_opacity(opacity, PET_OPACITY_MIN)
+}
+
+/// 规整背景/卡片元素透明度到 0.0–1.0，按 5% 取整。
+#[must_use]
+pub fn clamp_element_opacity(opacity: f32) -> f32 {
+    clamp_opacity(opacity, ELEMENT_OPACITY_MIN)
+}
+
+/// 规整字号大小到 11–18 px，默认 13。
+#[must_use]
+pub fn clamp_font_size(px: i64) -> u32 {
+    let clamped = px.clamp(i64::from(FONT_SIZE_MIN), i64::from(FONT_SIZE_MAX));
+    u32::try_from(clamped).unwrap_or(FONT_SIZE_DEFAULT)
 }
 
 /// 规整背景遮罩浓度到 0.2–0.95，按 5% 取整，非有限值回到 0.6。
@@ -183,9 +224,14 @@ mod tests {
     }
 
     #[test]
-    fn scale_is_clamped_and_stepped() {
+    fn scale_and_typography_are_clamped() {
         assert!((clamp_pet_scale(f32::NAN) - 1.0).abs() < f32::EPSILON);
         assert!((clamp_pet_scale(9.0) - 2.0).abs() < f32::EPSILON);
         assert!((clamp_pet_scale(1.234) - 1.25).abs() < 1e-6);
+        assert!((clamp_element_opacity(f32::NAN) - 1.0).abs() < f32::EPSILON);
+        assert!((clamp_element_opacity(-0.2) - 0.0).abs() < f32::EPSILON);
+        assert!((clamp_element_opacity(0.62) - 0.6).abs() < 1e-6);
+        assert_eq!(clamp_font_size(2), 11);
+        assert_eq!(clamp_font_size(99), 18);
     }
 }

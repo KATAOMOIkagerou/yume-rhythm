@@ -7,7 +7,7 @@ use crate::model::expression::{ExpressionKind, ExpressionMeta};
 use crate::model::pet::CharacterInfo;
 use crate::model::settings::PetPosition;
 use crate::model::shortcuts::ShortcutAction;
-use crate::model::theme::{AccentPreset, BackgroundMode};
+use crate::model::theme::{AccentPreset, BackgroundMode, CornerMode};
 use crate::model::timer::TimerMode;
 use crate::model::todo_md::TodoMdError;
 
@@ -144,11 +144,15 @@ pub enum SettingsCommand {
     /// 托盘菜单的勾选项。
     ToggleAutostart,
     SetHideOnFullscreen(bool),
-    /// 背景模式、强调色与控制台背景图。
+    /// 背景模式、透明度、强调色、界面圆角与控制台背景图。
     SetBackgroundMode(BackgroundMode),
     SetCustomBackground(Option<String>),
+    SetBgOpacity(f32),
+    SetCardOpacity(f32),
     SetAccent(AccentPreset),
     SetCustomAccent(Option<String>),
+    SetCornerMode(CornerMode),
+    SetCustomCornerRadius(i64),
     PickBackgroundImage,
     BackgroundImageLoaded {
         path: String,
@@ -175,14 +179,17 @@ pub enum SettingsCommand {
         shift: bool,
         key: String,
     },
-    /// 字体设置。
-    SetFontFamily(Option<String>),
+    /// 字体与字号设置。
+    SetZhFontFamily(Option<String>),
+    SetEnFontFamily(Option<String>),
+    SetFontSize(i64),
     PickCustomFont,
     ResetFont,
     FontsListed(Vec<String>),
     CustomFontLoaded {
         path: String,
         family: String,
+        has_cjk: bool,
     },
     CustomFontFailed(String),
 }

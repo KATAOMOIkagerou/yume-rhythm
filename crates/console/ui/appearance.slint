@@ -1,4 +1,4 @@
-// 设置页的外观模块：背景模式与背景图片、强调色、控制台与桌宠透明度。
+// 设置页的外观模块：背景模式与透明度、背景图片、强调色（含第 6 项自定义折叠面板）。
 
 import { LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
@@ -109,6 +109,77 @@ export component BackgroundCard inherits Card {
         background: Theme.divider;
     }
 
+    VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "背景透明度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.bg-opacity-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        bg-alpha-slider := RangeSlider {
+            label: "背景透明度";
+            minimum: 0.0;
+            maximum: 1.0;
+            step: 0.05;
+            value: Store.settings.bg-opacity;
+            changed(v) => { Store.set-bg-opacity(v); }
+        }
+
+        property <float> model-bg-alpha: Store.settings.bg-opacity;
+        changed model-bg-alpha => {
+            if (abs(bg-alpha-slider.value - self.model-bg-alpha) > 0.001) {
+                bg-alpha-slider.value = self.model-bg-alpha;
+            }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "卡片透明度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.card-opacity-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        card-alpha-slider := RangeSlider {
+            label: "卡片透明度";
+            minimum: 0.0;
+            maximum: 1.0;
+            step: 0.05;
+            value: Store.settings.card-opacity;
+            changed(v) => { Store.set-card-opacity(v); }
+        }
+
+        property <float> model-card-alpha: Store.settings.card-opacity;
+        changed model-card-alpha => {
+            if (abs(card-alpha-slider.value - self.model-card-alpha) > 0.001) {
+                card-alpha-slider.value = self.model-card-alpha;
+            }
+        }
+    }
+
+    Rectangle {
+        height: 1px;
+        background: Theme.divider;
+    }
+
     HorizontalLayout {
         spacing: 6px;
         VerticalLayout {
@@ -190,7 +261,7 @@ export component BackgroundCard inherits Card {
 export component AccentCard inherits Card {
     title: "强调色";
 
-    if Store.accent-presets.length >= 5: VerticalLayout {
+    if Store.accent-presets.length >= 6: VerticalLayout {
         spacing: 6px;
         HorizontalLayout {
             spacing: 6px;
@@ -201,117 +272,52 @@ export component AccentCard inherits Card {
         }
         HorizontalLayout {
             spacing: 6px;
-            for idx in [3, 4]: AccentSwatchChip {
+            for idx in [3, 4, 5]: AccentSwatchChip {
                 option: Store.accent-presets[idx];
                 clicked => { Store.set-accent(Store.accent-presets[idx].key); }
             }
-            Rectangle { horizontal-stretch: 1; }
         }
     }
 
-    HorizontalLayout {
-        spacing: 6px;
-        accent-input := LineEdit {
-            horizontal-stretch: 1;
-            text: Store.settings.custom-accent;
-            placeholder-text: "自定义强调色，如 #ff6699";
-            font-size: Theme.font-caption;
-            accepted(t) => { Store.set-custom-accent(t); }
-        }
-        PillButton {
-            kind: ButtonKind.secondary;
-            compact: true;
-            text: "应用";
-            clicked => { Store.set-custom-accent(accent-input.text); }
-        }
-        if Store.settings.accent-custom-active: PillButton {
-            kind: ButtonKind.ghost;
-            compact: true;
-            text: "清除";
-            clicked => { Store.clear-custom-accent(); }
-        }
-    }
-
-    if Store.settings.accent-error: Notice {
-        text: "颜色格式不对，请输入 6 位十六进制色值（例如 #ff6699）";
-        tone: Theme.red;
-        tone-soft: Theme.red-soft;
-    }
-
-    property <string> model-accent: Store.settings.custom-accent;
-    changed model-accent => {
-        if (accent-input.text != root.model-accent) {
-            accent-input.text = root.model-accent;
-        }
-    }
-}
-
-export component OpacityCard inherits Card {
-    title: "透明度";
-
-    VerticalLayout {
+    if Store.settings.accent-custom-open: VerticalLayout {
         spacing: 6px;
         HorizontalLayout {
-            Text {
-                text: "控制台透明度";
-                font-size: Theme.font-body;
-                color: Theme.text;
+            spacing: 6px;
+            accent-input := LineEdit {
                 horizontal-stretch: 1;
+                text: Store.settings.custom-accent;
+                placeholder-text: "自定义强调色，如 #ff6699";
+                font-size: Theme.font-caption;
+                accepted(t) => { Store.set-custom-accent(t); }
             }
-            Text {
-                text: Store.settings.console-opacity-text;
-                font-size: Theme.font-body;
-                font-weight: 500;
-                color: Theme.accent-strong-text;
+            PillButton {
+                kind: ButtonKind.secondary;
+                compact: true;
+                text: "应用";
+                clicked => { Store.set-custom-accent(accent-input.text); }
+            }
+            PillButton {
+                kind: ButtonKind.ghost;
+                compact: true;
+                text: "清除";
+                clicked => {
+                    accent-input.text = "";
+                    Store.clear-custom-accent();
+                }
             }
         }
-        console-slider := RangeSlider {
-            label: "控制台透明度";
-            minimum: 0.4;
-            maximum: 1.0;
-            step: 0.05;
-            value: Store.settings.console-opacity;
-            changed(v) => { Store.set-console-opacity(v); }
-        }
-    }
 
-    VerticalLayout {
-        spacing: 6px;
-        HorizontalLayout {
-            Text {
-                text: "桌宠透明度";
-                font-size: Theme.font-body;
-                color: Theme.text;
-                horizontal-stretch: 1;
-            }
-            Text {
-                text: Store.settings.pet-opacity-text;
-                font-size: Theme.font-body;
-                font-weight: 500;
-                color: Theme.accent-strong-text;
-            }
+        if Store.settings.accent-error: Notice {
+            text: "颜色格式不对，请输入 6 位十六进制色值（例如 #ff6699）";
+            tone: Theme.red;
+            tone-soft: Theme.red-soft;
         }
-        pet-slider := RangeSlider {
-            label: "桌宠透明度";
-            minimum: 0.3;
-            maximum: 1.0;
-            step: 0.05;
-            value: Store.settings.pet-opacity;
-            changed(v) => { Store.set-pet-opacity(v); }
-        }
-    }
 
-    property <float> model-console-opacity: Store.settings.console-opacity;
-    changed model-console-opacity => {
-        if (abs(console-slider.value - root.model-console-opacity) > 0.001) {
-            console-slider.value = root.model-console-opacity;
-        }
-    }
-
-    property <float> model-pet-opacity: Store.settings.pet-opacity;
-    changed model-pet-opacity => {
-        if (abs(pet-slider.value - root.model-pet-opacity) > 0.001) {
-            pet-slider.value = root.model-pet-opacity;
+        property <string> model-accent: Store.settings.custom-accent;
+        changed model-accent => {
+            if (accent-input.text != self.model-accent) {
+                accent-input.text = self.model-accent;
+            }
         }
     }
 }

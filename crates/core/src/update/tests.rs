@@ -315,6 +315,10 @@ fn theme_and_opacity_settings_validate_and_clamp() {
         AccentPreset::Mint,
     )));
     assert_eq!(w.state.settings().accent, AccentPreset::Mint);
+    assert_eq!(w.state.settings().last_preset_accent, AccentPreset::Mint);
+    assert_eq!(w.state.settings().custom_accent.as_deref(), Some("#00aaff"));
+
+    w.send(Command::Settings(SettingsCommand::SetCustomAccent(None)));
     assert_eq!(w.state.settings().custom_accent, None);
 
     let fx = w.send(Command::Settings(SettingsCommand::BackgroundImageLoaded {
@@ -408,7 +412,7 @@ fn external_md_todo_loads_tracks_dirty_and_unbinds() {
 #[test]
 fn startup_requests_fonts_custom_font_and_bound_md() {
     let mut persisted = Persisted::default();
-    persisted.settings.custom_font_path = Some("C:/fonts/custom.ttf".into());
+    persisted.settings.custom_font_paths = vec!["C:/fonts/custom.ttf".into()];
     persisted.settings.todo_md_path = Some("D:/tasks.md".into());
     persisted.settings.background_image = Some("C:/bg.jpg".into());
     let mut state = AppState::new(persisted);

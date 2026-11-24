@@ -1,11 +1,12 @@
-//! 设置页视图投影：背景模式/背景图片、强调色、透明度、字体列表、快捷键与角色信息。
+//! 设置页视图投影：背景模式/透明度/图片、强调色、圆角、窗口透明度、双语字体与字号、快捷键与角色信息。
 
 use super::file_name;
+use crate::fonts::{order_en_fonts, order_zh_fonts};
 use yume_core::AppState;
 use yume_core::model::audio::AudioError;
 use yume_core::model::pet::CharacterStatus;
 use yume_core::model::shortcuts::{ShortcutAction, ShortcutError, display_label};
-use yume_core::model::theme::{AccentPreset, BackgroundMode, Rgb};
+use yume_core::model::theme::{AccentPreset, BackgroundMode, CornerMode, Rgb, parse_hex_color};
 use yume_core::model::todo_md::TodoMdError;
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -17,19 +18,29 @@ pub struct Settings {
     pub pet_opacity_text: String,
     pub console_opacity: f32,
     pub console_opacity_text: String,
+    pub bg_opacity: f32,
+    pub bg_opacity_text: String,
+    pub card_opacity: f32,
+    pub card_opacity_text: String,
     pub background_index: i32,
     pub custom_background: String,
     pub bg_error: bool,
-    pub accent_custom_active: bool,
+    pub accent_custom_open: bool,
     pub custom_accent: String,
     pub accent_error: bool,
+    pub corner_index: i32,
+    pub corner_radius: i32,
+    pub corner_radius_text: String,
     pub has_bg_image: bool,
     pub bg_image_name: String,
     pub bg_dim: f32,
     pub bg_dim_text: String,
     pub bg_image_error: String,
     pub shortcut_error: String,
-    pub font_index: i32,
+    pub zh_font_index: i32,
+    pub en_font_index: i32,
+    pub font_size: i32,
+    pub font_size_text: String,
     pub font_status: String,
     pub font_failed: bool,
     pub locked: bool,
@@ -59,7 +70,11 @@ pub struct ShortcutItem {
     pub failed: bool,
 }
 
-pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>]) -> Settings {
+pub(super) fn project_settings(
+    state: &AppState,
+    zh_font_families: &[Option<String>],
+    en_font_families: &[Option<String>],
+) -> Settings {
     let s = state.settings();
     let c = state.character();
     let (character_status, character_failed) = match &c.status {
@@ -69,20 +84,28 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
     };
     let (font_status, font_failed) = if let Some(err) = state.font_error() {
         (format!("字体加载失败：{err}"), true)
-    } else if let Some(path) = s.custom_font_path.as_deref() {
-        (format!("已加载外部字体：{}", file_name(path)), false)
+    } else if !s.custom_font_paths.is_empty() {
+        let names = s
+            .custom_font_paths
+            .iter()
+            .map(|p| file_name(p))
+            .collect::<Vec<_>>()
+            .join("、");
+        (format!("已加载外部字体：{names}"), false)
     } else {
         (String::new(), false)
     };
-    let font_index = font_families
-        .iter()
-        .position(|f| f == &s.font_family)
-        .and_then(|i| i32::try_from(i).ok())
-        .unwrap_or(0);
+    let zh_font_index = font_index_of(zh_font_families, s.zh_font_family.as_ref());
+    let en_font_index = font_index_of(en_font_families, s.en_font_family.as_ref());
     let background_index = match s.background {
         BackgroundMode::Light => 0,
         BackgroundMode::Dark => 1,
         BackgroundMode::Custom => 2,
+    };
+    let corner_index = match s.corner_mode {
+        CornerMode::Round => 0,
+        CornerMode::Off => 1,
+        CornerMode::Custom => 2,
     };
 
     Settings {
@@ -93,12 +116,19 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
         pet_opacity_text: format!("{:.0}%", s.pet_opacity * 100.0),
         console_opacity: s.console_opacity,
         console_opacity_text: format!("{:.0}%", s.console_opacity * 100.0),
+        bg_opacity: s.bg_opacity,
+        bg_opacity_text: format!("{:.0}%", s.bg_opacity * 100.0),
+        card_opacity: s.card_opacity,
+        card_opacity_text: format!("{:.0}%", s.card_opacity * 100.0),
         background_index,
         custom_background: s.custom_background.clone().unwrap_or_default(),
         bg_error: state.bg_error(),
-        accent_custom_active: s.custom_accent.is_some(),
+        accent_custom_open: s.accent == AccentPreset::Custom,
         custom_accent: s.custom_accent.clone().unwrap_or_default(),
         accent_error: state.accent_error(),
+        corner_index,
+        corner_radius: i32::try_from(s.custom_corner_radius).unwrap_or(14),
+        corner_radius_text: format!("{} px", s.custom_corner_radius),
         has_bg_image: s.background_image.is_some(),
         bg_image_name: s
             .background_image
@@ -113,7 +143,10 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
             .shortcut_error()
             .map(shortcut_error_text)
             .unwrap_or_default(),
-        font_index,
+        zh_font_index,
+        en_font_index,
+        font_size: i32::try_from(s.font_size).unwrap_or(13),
+        font_size_text: format!("{} px", s.font_size),
         font_status,
         font_failed,
         locked: state.pet().locked,
@@ -131,16 +164,28 @@ pub(super) fn project_settings(state: &AppState, font_families: &[Option<String>
     }
 }
 
+fn font_index_of(list: &[Option<String>], selected: Option<&String>) -> i32 {
+    list.iter()
+        .position(|f| f.as_ref() == selected)
+        .and_then(|i| i32::try_from(i).ok())
+        .unwrap_or(0)
+}
+
 pub(super) fn accent_presets(state: &AppState) -> Vec<AccentPresetView> {
     let s = state.settings();
-    let custom_active = s.custom_accent.is_some();
+    let fallback = s.last_preset_accent.color_or(Rgb::new(0xd6, 0x55, 0x8c));
+    let custom_swatch = s
+        .custom_accent
+        .as_deref()
+        .and_then(parse_hex_color)
+        .unwrap_or(fallback);
     AccentPreset::ALL
         .into_iter()
         .map(|preset| AccentPresetView {
             key: preset.key().to_owned(),
             name: accent_name(preset).to_owned(),
-            swatch: preset.color(),
-            active: !custom_active && preset == s.accent,
+            swatch: preset.color_or(custom_swatch),
+            active: preset == s.accent,
         })
         .collect()
 }
@@ -164,18 +209,38 @@ pub(super) fn shortcut_items(state: &AppState) -> Vec<ShortcutItem> {
         .collect()
 }
 
-pub(super) fn font_options(state: &AppState) -> (Vec<String>, Vec<Option<String>>) {
-    let mut labels = vec!["默认（微软雅黑 UI）".to_owned()];
+pub(super) fn zh_font_options(state: &AppState) -> (Vec<String>, Vec<Option<String>>) {
+    build_font_options(
+        "默认字体（微软雅黑 UI）",
+        &order_zh_fonts(state.available_fonts()),
+        state.settings().zh_font_family.as_deref(),
+    )
+}
+
+pub(super) fn en_font_options(state: &AppState) -> (Vec<String>, Vec<Option<String>>) {
+    build_font_options(
+        "默认字体（Segoe UI）",
+        &order_en_fonts(state.available_fonts()),
+        state.settings().en_font_family.as_deref(),
+    )
+}
+
+fn build_font_options(
+    default_label: &str,
+    ordered_fonts: &[String],
+    selected: Option<&str>,
+) -> (Vec<String>, Vec<Option<String>>) {
+    let mut labels = vec![default_label.to_owned()];
     let mut families: Vec<Option<String>> = vec![None];
-    for font in state.available_fonts() {
+    for font in ordered_fonts {
         labels.push(font.clone());
         families.push(Some(font.clone()));
     }
-    if let Some(selected) = state.settings().font_family.as_ref()
-        && !families.iter().any(|f| f.as_deref() == Some(selected))
+    if let Some(sel) = selected
+        && !families.iter().any(|f| f.as_deref() == Some(sel))
     {
-        labels.push(selected.clone());
-        families.push(Some(selected.clone()));
+        labels.push(sel.to_owned());
+        families.push(Some(sel.to_owned()));
     }
     (labels, families)
 }
@@ -196,6 +261,7 @@ fn accent_name(preset: AccentPreset) -> &'static str {
         AccentPreset::Lavender => "丁香紫",
         AccentPreset::Sunset => "落日橘",
         AccentPreset::Mint => "薄荷绿",
+        AccentPreset::Custom => "自定义",
     }
 }
 

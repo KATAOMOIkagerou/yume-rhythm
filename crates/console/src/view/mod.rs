@@ -15,9 +15,10 @@ use yume_core::model::audio::{AudioSource, AudioStatus};
 use yume_core::model::events::ActivityMode;
 use yume_core::model::expression::ExpressionKind;
 use yume_core::model::pet::{CharacterStatus, Dialog};
-use yume_core::model::settings::DEFAULT_FONT_FAMILY;
 use yume_core::model::shortcuts::Shortcuts;
-use yume_core::model::theme::{ThemePalette, resolve_palette};
+use yume_core::model::theme::{
+    CornerRadii, ThemePalette, ThemeSpec, resolve_palette, resolve_radii,
+};
 use yume_core::model::timer::{TimerMode, TimerStatus};
 use yume_core::{AppState, WallMs};
 
@@ -39,15 +40,20 @@ pub struct View {
     pub characters: Vec<String>,
     pub accent_presets: Vec<AccentPresetView>,
     pub shortcuts: Vec<ShortcutItem>,
-    pub fonts: Vec<String>,
+    pub zh_fonts: Vec<String>,
+    pub en_fonts: Vec<String>,
     pub palette: Option<ThemePalette>,
-    pub font_family: String,
+    pub radii: Option<CornerRadii>,
+    pub font_size: u32,
+    /// `(英文字体, 中文字体)` 组合；变化时由绑定层重建优先回落链。
+    pub font_pair: (Option<String>, Option<String>),
     pub dialog: i32,
     /// 下拉框下标对应的设备 id。0 为系统默认（`None`）。
     pub device_ids: Vec<Option<String>>,
     pub character_ids: Vec<String>,
     /// 字体下拉框下标对应的字体家族名。0 为默认字体（`None`）。
-    pub font_families: Vec<Option<String>>,
+    pub zh_font_families: Vec<Option<String>>,
+    pub en_font_families: Vec<Option<String>>,
     /// 当前快捷键配置，供窗口按键回调判断是否消耗本地按键事件。
     pub shortcuts_config: Shortcuts,
 }
@@ -158,19 +164,21 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         .iter()
         .map(|c| c.id.clone())
         .collect();
-    let (fonts, font_families) = settings::font_options(state);
+    let (zh_fonts, zh_font_families) = settings::zh_font_options(state);
+    let (en_fonts, en_font_families) = settings::en_font_options(state);
     let (base_expressions, accessory_expressions) = expression_chips(state);
     let s = state.settings();
-    let palette = resolve_palette(
-        s.background,
-        s.custom_background.as_deref(),
-        s.accent,
-        s.custom_accent.as_deref(),
-    );
-    let font_family = s
-        .font_family
-        .clone()
-        .unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_owned());
+    let palette = resolve_palette(ThemeSpec {
+        bg_mode: s.background,
+        custom_bg: s.custom_background.as_deref(),
+        custom_bg_dark: s.custom_bg_dark,
+        accent: s.accent,
+        last_preset_accent: s.last_preset_accent,
+        custom_accent: s.custom_accent.as_deref(),
+        bg_opacity: s.bg_opacity,
+        card_opacity: s.card_opacity,
+    });
+    let radii = resolve_radii(s.corner_mode, s.custom_corner_radius);
 
     View {
         header: header(state),
@@ -196,13 +204,16 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         devices: std::iter::once("系统默认输出设备".to_owned())
             .chain(state.audio().devices.iter().map(|d| d.name.clone()))
             .collect(),
-        settings: settings::project_settings(state, &font_families),
+        settings: settings::project_settings(state, &zh_font_families, &en_font_families),
         characters: settings::characters(state),
         accent_presets: settings::accent_presets(state),
         shortcuts: settings::shortcut_items(state),
-        fonts,
+        zh_fonts,
+        en_fonts,
         palette: Some(palette),
-        font_family,
+        radii: Some(radii),
+        font_size: s.font_size,
+        font_pair: (s.en_font_family.clone(), s.zh_font_family.clone()),
         dialog: match state.dialog() {
             Dialog::None => 0,
             Dialog::ConfirmPause => 1,
@@ -211,7 +222,8 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         },
         device_ids,
         character_ids,
-        font_families,
+        zh_font_families,
+        en_font_families,
         shortcuts_config: state.settings().shortcuts.clone(),
     }
 }

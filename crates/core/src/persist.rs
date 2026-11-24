@@ -5,12 +5,13 @@
 use crate::model::events::{EventContext, EventSwitches, RandomEvent};
 use crate::model::expr_rules::{ExpressionRule, ExpressionRules, clamp_duration_ms};
 use crate::model::settings::{
-    PetPosition, Settings, clamp_background_dim, clamp_console_opacity, clamp_pet_opacity,
-    clamp_pet_scale, clamp_random_interval,
+    PetPosition, Settings, clamp_background_dim, clamp_console_opacity, clamp_element_opacity,
+    clamp_font_size, clamp_pet_opacity, clamp_pet_scale, clamp_random_interval,
 };
 use crate::model::shortcuts::Shortcuts;
 use crate::model::theme::{
-    AccentPreset, BackgroundMode, migrate_legacy_theme, normalize_hex_color,
+    AccentPreset, BackgroundMode, CornerMode, clamp_corner_radius, migrate_legacy_theme,
+    normalize_hex_color,
 };
 use crate::model::timer::{DEFAULT_MINUTES, TimerMode, clamp_minutes};
 use crate::model::todo::{TodoItem, TodoList};
@@ -120,14 +121,44 @@ fn read_settings(v: &Value) -> Settings {
     let custom_background = field::<Option<String>>(v, "custom_background")
         .flatten()
         .and_then(|raw| normalize_hex_color(&raw));
-    let accent =
+    let custom_bg_dark =
+        field::<bool>(v, "custom_bg_dark").unwrap_or(background == BackgroundMode::Dark);
+    let raw_accent =
         field::<AccentPreset>(v, "accent").unwrap_or_else(|| legacy.map_or(d.accent, |m| m.1));
     let custom_accent = field::<Option<String>>(v, "custom_accent")
         .flatten()
         .and_then(|raw| normalize_hex_color(&raw));
+    let (accent, last_preset_accent) = if v.get("last_preset_accent").is_none()
+        && raw_accent != AccentPreset::Custom
+        && custom_accent.is_some()
+    {
+        (AccentPreset::Custom, raw_accent)
+    } else {
+        let fallback = field::<AccentPreset>(v, "last_preset_accent")
+            .filter(|p| *p != AccentPreset::Custom)
+            .unwrap_or(if raw_accent == AccentPreset::Custom {
+                AccentPreset::Sakura
+            } else {
+                raw_accent
+            });
+        (raw_accent, fallback)
+    };
+    let corner_mode = field::<CornerMode>(v, "corner_mode").unwrap_or(d.corner_mode);
+    let custom_corner_radius =
+        field::<i64>(v, "custom_corner_radius").map_or(d.custom_corner_radius, clamp_corner_radius);
     let background_image = trimmed_opt(v, "background_image");
-    let font_family = trimmed_opt(v, "font_family");
-    let custom_font_path = trimmed_opt(v, "custom_font_path");
+    let zh_font_family = if v.get("zh_font_family").is_some() {
+        trimmed_opt(v, "zh_font_family")
+    } else {
+        trimmed_opt(v, "font_family")
+    };
+    let en_font_family = trimmed_opt(v, "en_font_family");
+    let font_size = field::<i64>(v, "font_size").map_or(d.font_size, clamp_font_size);
+    let custom_font_paths = if v.get("custom_font_paths").is_some() {
+        trimmed_vec(v, "custom_font_paths")
+    } else {
+        trimmed_opt(v, "custom_font_path").into_iter().collect()
+    };
     let todo_md_path = trimmed_opt(v, "todo_md_path");
 
     Settings {
@@ -147,8 +178,14 @@ fn read_settings(v: &Value) -> Settings {
             .unwrap_or(d.character),
         background,
         custom_background,
+        custom_bg_dark,
+        bg_opacity: field::<f32>(v, "bg_opacity").map_or(d.bg_opacity, clamp_element_opacity),
+        card_opacity: field::<f32>(v, "card_opacity").map_or(d.card_opacity, clamp_element_opacity),
         accent,
+        last_preset_accent,
         custom_accent,
+        corner_mode,
+        custom_corner_radius,
         background_image,
         background_dim: field::<f32>(v, "background_dim")
             .map_or(d.background_dim, clamp_background_dim),
@@ -156,8 +193,10 @@ fn read_settings(v: &Value) -> Settings {
             .map_or(d.console_opacity, clamp_console_opacity),
         pet_opacity: field::<f32>(v, "pet_opacity").map_or(d.pet_opacity, clamp_pet_opacity),
         shortcuts,
-        font_family,
-        custom_font_path,
+        zh_font_family,
+        en_font_family,
+        font_size,
+        custom_font_paths,
         todo_md_path,
     }
 }
@@ -167,6 +206,19 @@ fn trimmed_opt(v: &Value, key: &str) -> Option<String> {
         .flatten()
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty())
+}
+
+fn trimmed_vec(v: &Value, key: &str) -> Vec<String> {
+    v.get(key)
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// 角色 id 只允许小写字母、数字、`-`、`_`，防止被拼成任意路径。
@@ -258,16 +310,24 @@ mod tests {
         p.settings.pet_position = Some(PetPosition { x: -100, y: 20 });
         p.settings.background = BackgroundMode::Custom;
         p.settings.custom_background = Some("#222530".into());
-        p.settings.accent = AccentPreset::Sunset;
+        p.settings.custom_bg_dark = true;
+        p.settings.bg_opacity = 0.85;
+        p.settings.card_opacity = 0.7;
+        p.settings.accent = AccentPreset::Custom;
+        p.settings.last_preset_accent = AccentPreset::Sunset;
         p.settings.custom_accent = Some("#4a90e2".into());
+        p.settings.corner_mode = CornerMode::Custom;
+        p.settings.custom_corner_radius = 18;
         p.settings.background_image = Some("C:/img/bg.png".into());
         p.settings.background_dim = 0.75;
         p.settings.console_opacity = 0.85;
         p.settings.pet_opacity = 0.7;
         p.settings.shortcuts.global_toggle_audio = "Ctrl+Alt+M".into();
         p.settings.shortcuts.local_hide_console = "F9".into();
-        p.settings.font_family = Some("LXGW WenKai".into());
-        p.settings.custom_font_path = Some("C:/fonts/wenkai.ttf".into());
+        p.settings.zh_font_family = Some("LXGW WenKai".into());
+        p.settings.en_font_family = Some("Inter".into());
+        p.settings.font_size = 15;
+        p.settings.custom_font_paths = vec!["C:/fonts/wenkai.ttf".into()];
         p.settings.todo_md_path = Some("D:/notes/todo.md".into());
         p.expression_rules.set(
             "sakura",
@@ -299,10 +359,13 @@ mod tests {
             "settings": { "end_sound": "yes", "random_enabled": false, "random_interval_s": 1,
                           "pet_scale": 99, "pet_opacity": 0.05, "console_opacity": 5.0,
                           "background": "unknown", "custom_background": "bad",
+                          "bg_opacity": -1.0, "card_opacity": 3.0,
                           "accent": "unknown", "custom_accent": "not-a-color",
+                          "corner_mode": "unknown", "custom_corner_radius": 99,
                           "background_image": "   ", "background_dim": 9.0,
                           "shortcuts": { "global_toggle_console": "Space", "local_hide_console": "F2" },
-                          "font_family": "   ", "custom_font_path": "",
+                          "zh_font_family": "   ", "en_font_family": "", "font_size": 99,
+                          "custom_font_paths": ["", "   "],
                           "todo_md_path": "  ", "character": "../../evil" },
             "study": { "minutes": 0 },
             "event_switches": { "music": { "doze": true, "love": false } },
@@ -324,14 +387,20 @@ mod tests {
         assert!((p.settings.console_opacity - 1.0).abs() < f32::EPSILON);
         assert_eq!(p.settings.background, BackgroundMode::Light);
         assert_eq!(p.settings.custom_background, None);
+        assert!((p.settings.bg_opacity - 0.0).abs() < f32::EPSILON);
+        assert!((p.settings.card_opacity - 1.0).abs() < f32::EPSILON);
         assert_eq!(p.settings.accent, AccentPreset::Sakura);
         assert_eq!(p.settings.custom_accent, None);
+        assert_eq!(p.settings.corner_mode, CornerMode::Round);
+        assert_eq!(p.settings.custom_corner_radius, 28);
         assert_eq!(p.settings.background_image, None);
         assert!((p.settings.background_dim - 0.95).abs() < f32::EPSILON);
         assert_eq!(p.settings.shortcuts.global_toggle_console, "Ctrl+Alt+C");
         assert_eq!(p.settings.shortcuts.local_hide_console, "F2");
-        assert_eq!(p.settings.font_family, None);
-        assert_eq!(p.settings.custom_font_path, None);
+        assert_eq!(p.settings.zh_font_family, None);
+        assert_eq!(p.settings.en_font_family, None);
+        assert_eq!(p.settings.font_size, 18);
+        assert!(p.settings.custom_font_paths.is_empty());
         assert_eq!(p.settings.todo_md_path, None);
         assert_eq!(p.settings.character, "sakura");
         assert_eq!(p.study.minutes, 1);
@@ -345,12 +414,17 @@ mod tests {
     }
 
     #[test]
-    fn legacy_theme_migrates_when_new_fields_absent() {
-        let night =
-            Persisted::from_json(r##"{"settings":{"theme":"night","custom_accent":"#123456"}}"##);
+    fn legacy_theme_and_v03_fields_migrate() {
+        let night = Persisted::from_json(
+            r##"{"settings":{"theme":"night","custom_accent":"#123456","font_family":"KaiTi","custom_font_path":"C:/f.ttf"}}"##,
+        );
         assert_eq!(night.settings.background, BackgroundMode::Dark);
-        assert_eq!(night.settings.accent, AccentPreset::Sakura);
+        assert!(night.settings.custom_bg_dark);
+        assert_eq!(night.settings.accent, AccentPreset::Custom);
+        assert_eq!(night.settings.last_preset_accent, AccentPreset::Sakura);
         assert_eq!(night.settings.custom_accent.as_deref(), Some("#123456"));
+        assert_eq!(night.settings.zh_font_family.as_deref(), Some("KaiTi"));
+        assert_eq!(night.settings.custom_font_paths, vec!["C:/f.ttf"]);
 
         let peach = Persisted::from_json(r#"{"settings":{"theme":"peach"}}"#);
         assert_eq!(peach.settings.background, BackgroundMode::Light);

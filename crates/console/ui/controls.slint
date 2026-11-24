@@ -18,7 +18,7 @@ export component Toggle inherits Rectangle {
 
     width: 38px;
     height: 22px;
-    border-radius: self.height / 2;
+    border-radius: min(self.height / 2, Theme.radius-pill);
     opacity: root.enabled ? 1 : 0.45;
     background: root.checked ? Theme.accent : Theme.border;
     animate background { duration: 140ms; }
@@ -28,8 +28,8 @@ export component Toggle inherits Rectangle {
         height: 16px;
         y: 3px;
         x: root.checked ? root.width - self.width - 3px : 3px;
-        border-radius: 8px;
-        background: Theme.surface;
+        border-radius: min(8px, Theme.radius-pill);
+        background: Theme.surface-solid;
         drop-shadow-blur: 2px;
         drop-shadow-color: #00000030;
         animate x { duration: 140ms; easing: ease-out; }
@@ -59,9 +59,9 @@ export component Check inherits Rectangle {
 
     width: 20px;
     height: 20px;
-    border-radius: 6px;
+    border-radius: min(6px, Theme.radius-small);
     opacity: root.enabled ? 1 : 0.35;
-    background: root.checked ? root.tone : Theme.surface;
+    background: root.checked ? root.tone : Theme.surface-solid;
     border-width: root.checked ? 0px : 1.5px;
     border-color: ta.has-hover && root.enabled ? root.tone : Theme.text-muted;
     animate background { duration: 120ms; }
@@ -129,7 +129,7 @@ export component RangeSlider inherits Rectangle {
         x: (root.width - root.knob-size) * root.ratio;
         y: (parent.height - self.height) / 2;
         border-radius: self.width / 2;
-        background: Theme.surface;
+        background: Theme.surface-solid;
         border-width: 2px;
         border-color: Theme.accent;
         drop-shadow-blur: ta.pressed ? 6px : 2px;

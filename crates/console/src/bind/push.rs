@@ -3,7 +3,7 @@
 use crate::ui::{self, Theme};
 use crate::view::{self, View};
 use slint::Color;
-use yume_core::model::theme::{Rgb, Rgba, ThemePalette};
+use yume_core::model::theme::{CornerRadii, Rgb, Rgba, ThemePalette};
 
 fn to_color(c: Rgb) -> Color {
     Color::from_rgb_u8(c.r, c.g, c.b)
@@ -14,10 +14,12 @@ fn to_rgba(c: Rgba) -> Color {
 }
 
 pub(super) fn apply_palette(theme: &Theme<'_>, p: ThemePalette) {
-    theme.set_bg(to_color(p.bg));
-    theme.set_surface(to_color(p.surface));
-    theme.set_surface_alt(to_color(p.surface_alt));
-    theme.set_surface_hover(to_color(p.surface_hover));
+    theme.set_bg_solid(to_color(p.bg_solid));
+    theme.set_bg(to_rgba(p.bg));
+    theme.set_surface_solid(to_color(p.surface_solid));
+    theme.set_surface(to_rgba(p.surface));
+    theme.set_surface_alt(to_rgba(p.surface_alt));
+    theme.set_surface_hover(to_rgba(p.surface_hover));
     theme.set_border(to_color(p.border));
     theme.set_divider(to_color(p.divider));
     theme.set_text(to_color(p.text));
@@ -38,6 +40,24 @@ pub(super) fn apply_palette(theme: &Theme<'_>, p: ThemePalette) {
     theme.set_red(to_color(p.red));
     theme.set_red_soft(to_color(p.red_soft));
     theme.set_scrim(to_rgba(p.scrim));
+}
+
+pub(super) fn apply_radii(theme: &Theme<'_>, r: CornerRadii) {
+    #[allow(clippy::cast_precision_loss, reason = "像素圆角值不超过 999，精度无损")]
+    {
+        theme.set_radius(r.card_px as f32);
+        theme.set_radius_small(r.small_px as f32);
+        theme.set_radius_pill(r.pill_px as f32);
+    }
+}
+
+pub(super) fn apply_font_size(theme: &Theme<'_>, size_px: u32) {
+    #[allow(clippy::cast_precision_loss, reason = "字号范围 11..=18，精度无损")]
+    let body = size_px as f32;
+    theme.set_font_caption((body - 1.5).max(9.5));
+    theme.set_font_body(body);
+    theme.set_font_title(body + 1.0);
+    theme.set_font_display((46.0 * (body / 13.0)).round());
 }
 
 pub(super) fn header(v: &View) -> ui::HeaderView {
@@ -157,19 +177,29 @@ pub(super) fn settings(v: &View) -> ui::SettingsView {
         pet_opacity_text: s.pet_opacity_text.as_str().into(),
         console_opacity: s.console_opacity,
         console_opacity_text: s.console_opacity_text.as_str().into(),
+        bg_opacity: s.bg_opacity,
+        bg_opacity_text: s.bg_opacity_text.as_str().into(),
+        card_opacity: s.card_opacity,
+        card_opacity_text: s.card_opacity_text.as_str().into(),
         background_index: s.background_index,
         custom_background: s.custom_background.as_str().into(),
         bg_error: s.bg_error,
-        accent_custom_active: s.accent_custom_active,
+        accent_custom_open: s.accent_custom_open,
         custom_accent: s.custom_accent.as_str().into(),
         accent_error: s.accent_error,
+        corner_index: s.corner_index,
+        corner_radius: s.corner_radius,
+        corner_radius_text: s.corner_radius_text.as_str().into(),
         has_bg_image: s.has_bg_image,
         bg_image_name: s.bg_image_name.as_str().into(),
         bg_dim: s.bg_dim,
         bg_dim_text: s.bg_dim_text.as_str().into(),
         bg_image_error: s.bg_image_error.as_str().into(),
         shortcut_error: s.shortcut_error.as_str().into(),
-        font_index: s.font_index,
+        zh_font_index: s.zh_font_index,
+        en_font_index: s.en_font_index,
+        font_size: s.font_size,
+        font_size_text: s.font_size_text.as_str().into(),
         font_status: s.font_status.as_str().into(),
         font_failed: s.font_failed,
         locked: s.locked,

@@ -16,8 +16,8 @@ export component DialogLayer inherits Rectangle {
     panel := Rectangle {
         width: min(root.width - 48px, 320px);
         height: body.preferred-height;
-        background: Theme.surface;
-        border-radius: 18px;
+        background: Theme.surface-solid;
+        border-radius: Theme.radius;
         drop-shadow-blur: 24px;
         drop-shadow-color: #2d243140;
         drop-shadow-offset-y: 6px;
@@ -29,7 +29,7 @@ export component DialogLayer inherits Rectangle {
                 text: root.kind == 1 ? "要暂停倒计时吗？"
                     : root.kind == 2 ? "要离开自习吗？"
                     : "好的，继续加油！";
-                font-size: 16px;
+                font-size: Theme.font-title + 2px;
                 font-weight: 600;
                 color: Theme.text;
                 wrap: word-wrap;

@@ -15,6 +15,8 @@ mod todo;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_appearance;
+#[cfg(test)]
 mod tests_editor;
 
 use crate::clock::{Ctx, WallMs};
@@ -38,7 +40,7 @@ pub fn update(state: &mut AppState, command: Command, ctx: &mut Ctx<'_>) -> Vec<
                 Effect::ListAudioDevices,
                 Effect::ListFonts,
             ]);
-            if let Some(path) = state.settings.custom_font_path.clone() {
+            for path in state.settings.custom_font_paths.clone() {
                 fx.push(Effect::LoadCustomFont { path });
             }
             if let Some(path) = state.settings.todo_md_path.clone() {

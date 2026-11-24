@@ -72,7 +72,7 @@ component StatusCard inherits Card {
             horizontal-stretch: 1;
             Text {
                 text: Store.music.bpm-text;
-                font-size: 40px;
+                font-size: Theme.font-display - 6px;
                 font-weight: 300;
                 color: Store.music.beat-locked ? Theme.violet : Theme.text-muted;
                 vertical-alignment: bottom;

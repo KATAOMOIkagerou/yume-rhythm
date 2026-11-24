@@ -1,20 +1,66 @@
-// 设置页的界面字体卡片。
+// 设置页的界面字体与字号卡片：中文字体（上）、英文字体（下，查找优先级更高）、字号大小。
 
 import { ComboBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { ButtonKind, Card, Notice, PillButton } from "widgets.slint";
+import { RangeSlider } from "controls.slint";
 import { Store } from "store.slint";
 
 export component FontCard inherits Card {
     title: "界面字体";
+    hint: "英文字体优先匹配西文与数字";
 
-    HorizontalLayout {
+    VerticalLayout {
+        spacing: 4px;
+        Text {
+            text: "中文字体";
+            font-size: Theme.font-caption;
+            color: Theme.text-secondary;
+        }
+        zh-picker := ComboBox {
+            model: Store.zh-fonts;
+            current-index: Store.settings.zh-font-index;
+            selected => { Store.select-zh-font(self.current-index); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 4px;
+        Text {
+            text: "英文字体";
+            font-size: Theme.font-caption;
+            color: Theme.text-secondary;
+        }
+        en-picker := ComboBox {
+            model: Store.en-fonts;
+            current-index: Store.settings.en-font-index;
+            selected => { Store.select-en-font(self.current-index); }
+        }
+    }
+
+    VerticalLayout {
         spacing: 6px;
-        picker := ComboBox {
-            horizontal-stretch: 1;
-            model: Store.fonts;
-            current-index: Store.settings.font-index;
-            selected => { Store.select-font(self.current-index); }
+        HorizontalLayout {
+            Text {
+                text: "字号大小";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.font-size-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        size-slider := RangeSlider {
+            label: "字号大小";
+            minimum: 11;
+            maximum: 18;
+            step: 1;
+            value: Store.settings.font-size;
+            changed(v) => { Store.set-font-size(round(v)); }
         }
     }
 
@@ -41,10 +87,24 @@ export component FontCard inherits Card {
         tone-soft: Store.settings.font-failed ? Theme.red-soft : Theme.surface-alt;
     }
 
-    property <int> model-font-index: Store.settings.font-index;
-    changed model-font-index => {
-        if (picker.current-index != root.model-font-index) {
-            picker.current-index = root.model-font-index;
+    property <int> model-zh-index: Store.settings.zh-font-index;
+    changed model-zh-index => {
+        if (zh-picker.current-index != root.model-zh-index) {
+            zh-picker.current-index = root.model-zh-index;
+        }
+    }
+
+    property <int> model-en-index: Store.settings.en-font-index;
+    changed model-en-index => {
+        if (en-picker.current-index != root.model-en-index) {
+            en-picker.current-index = root.model-en-index;
+        }
+    }
+
+    property <int> model-font-size: Store.settings.font-size;
+    changed model-font-size => {
+        if (abs(size-slider.value - root.model-font-size) > 0.1) {
+            size-slider.value = root.model-font-size;
         }
     }
 }

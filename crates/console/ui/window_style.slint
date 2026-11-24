@@ -1,0 +1,135 @@
+// 设置页的界面圆角与窗口透明度卡片（从 appearance.slint 拆出以保持单文件简洁）。
+
+import { Theme } from "theme.slint";
+import { Card, Chip } from "widgets.slint";
+import { RangeSlider } from "controls.slint";
+import { Store } from "store.slint";
+
+export component CornerCard inherits Card {
+    title: "界面圆角";
+
+    HorizontalLayout {
+        spacing: 6px;
+        Chip {
+            horizontal-stretch: 1;
+            text: "圆角";
+            selected: Store.settings.corner-index == 0;
+            clicked => { Store.set-corner-mode("round"); }
+        }
+        Chip {
+            horizontal-stretch: 1;
+            text: "关闭圆角";
+            selected: Store.settings.corner-index == 1;
+            clicked => { Store.set-corner-mode("off"); }
+        }
+        Chip {
+            horizontal-stretch: 1;
+            text: "自定义";
+            selected: Store.settings.corner-index == 2;
+            clicked => { Store.set-corner-mode("custom"); }
+        }
+    }
+
+    if Store.settings.corner-index == 2: VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "圆角大小";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.corner-radius-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        corner-slider := RangeSlider {
+            label: "自定义圆角大小";
+            minimum: 0;
+            maximum: 28;
+            step: 1;
+            value: Store.settings.corner-radius;
+            changed(v) => { Store.set-corner-radius(round(v)); }
+        }
+
+        property <int> model-corner: Store.settings.corner-radius;
+        changed model-corner => {
+            if (abs(corner-slider.value - self.model-corner) > 0.1) {
+                corner-slider.value = self.model-corner;
+            }
+        }
+    }
+}
+
+export component OpacityCard inherits Card {
+    title: "窗口透明度";
+
+    VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "控制台透明度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.console-opacity-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        console-slider := RangeSlider {
+            label: "控制台透明度";
+            minimum: 0.4;
+            maximum: 1.0;
+            step: 0.05;
+            value: Store.settings.console-opacity;
+            changed(v) => { Store.set-console-opacity(v); }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: "桌宠透明度";
+                font-size: Theme.font-body;
+                color: Theme.text;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: Store.settings.pet-opacity-text;
+                font-size: Theme.font-body;
+                font-weight: 500;
+                color: Theme.accent-strong-text;
+            }
+        }
+        pet-slider := RangeSlider {
+            label: "桌宠透明度";
+            minimum: 0.3;
+            maximum: 1.0;
+            step: 0.05;
+            value: Store.settings.pet-opacity;
+            changed(v) => { Store.set-pet-opacity(v); }
+        }
+    }
+
+    property <float> model-console-opacity: Store.settings.console-opacity;
+    changed model-console-opacity => {
+        if (abs(console-slider.value - root.model-console-opacity) > 0.001) {
+            console-slider.value = root.model-console-opacity;
+        }
+    }
+
+    property <float> model-pet-opacity: Store.settings.pet-opacity;
+    changed model-pet-opacity => {
+        if (abs(pet-slider.value - root.model-pet-opacity) > 0.001) {
+            pet-slider.value = root.model-pet-opacity;
+        }
+    }
+}

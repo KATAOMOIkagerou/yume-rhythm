@@ -9,6 +9,8 @@ pub mod pet;
 pub mod settings;
 pub mod shortcuts;
 pub mod theme;
+#[cfg(test)]
+mod theme_tests;
 pub mod timer;
 pub mod todo;
 pub mod todo_md;
