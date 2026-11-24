@@ -31,9 +31,9 @@ pub use msgloop::{FrameTimer, post_quit, pump_messages};
 pub use pet_window::{PetEvent, PetWindow};
 #[cfg(windows)]
 pub use system::{
-    InstanceGuard, acquire_single_instance, bring_to_front, enable_per_monitor_dpi,
-    fullscreen_app_active, notify_existing_instance, open_sound_settings, place_on_screen,
-    set_autostart, set_window_opacity,
+    InstanceGuard, acquire_single_instance, bring_to_front, desktop_shell_active,
+    enable_per_monitor_dpi, fullscreen_app_active, notify_existing_instance, open_sound_settings,
+    place_on_screen, set_autostart, set_window_opacity,
 };
 #[cfg(windows)]
 pub use tray::{Tray, TrayEvent, TrayItem};

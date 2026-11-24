@@ -4,15 +4,16 @@ use crate::pet_window::ACTIVATE_MESSAGE;
 use windows::Win32::Foundation::{
     COLORREF, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HWND, LPARAM, POINT, RECT, WPARAM,
 };
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO,
-    MonitorFromPoint, MonitorFromRect,
+    ClientToScreen, GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTONULL, MONITORINFO,
+    MonitorFromPoint, MonitorFromRect, MonitorFromWindow,
 };
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
     RegCreateKeyExW, RegDeleteKeyValueW, RegSetValueExW,
 };
-use windows::Win32::System::Threading::CreateMutexW;
+use windows::Win32::System::Threading::{CreateMutexW, GetCurrentProcessId};
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
 };
@@ -150,11 +151,143 @@ pub fn set_autostart(name: &str, command: Option<&str>) -> windows::core::Result
 }
 
 /// 前台是否有全屏程序（游戏、全屏视频、演示）。
+///
+/// 当桌面上所有窗口关闭或最小化时，系统会把焦点转移到 `WorkerW`/`Progman` 等满屏桌面宿主，
+/// 导致 `SHQueryUserNotificationState` 返回 `QUNS_BUSY`；因此这里必须结合前台窗口类与几何检查排除桌面与壳层窗口。
 #[must_use]
 pub fn fullscreen_app_active() -> bool {
-    // SAFETY: 无参数。
-    let state = unsafe { SHQueryUserNotificationState() };
-    matches!(state, Ok(s) if s == QUNS_BUSY || s == QUNS_RUNNING_D3D_FULL_SCREEN || s == QUNS_PRESENTATION_MODE)
+    // SAFETY: 仅查询系统前台窗口句柄与通知状态，无指针写入或生命周期依赖。
+    let fg = unsafe { wm::GetForegroundWindow() };
+    if fg.is_invalid() {
+        return false;
+    }
+    // SAFETY: 传入经判空的 `HWND` 查询可见性、最小化状态与所属进程，Win32 对失效句柄返回失败不会越界。
+    let (visible, iconic, own_process) = unsafe {
+        let mut pid = 0u32;
+        let _ = wm::GetWindowThreadProcessId(fg, Some(&raw mut pid));
+        (
+            wm::IsWindowVisible(fg).as_bool(),
+            wm::IsIconic(fg).as_bool(),
+            pid == GetCurrentProcessId(),
+        )
+    };
+    if !visible || iconic || own_process || is_window_cloaked(fg) {
+        return false;
+    }
+    if is_shell_or_desktop_window(fg) || ancestor_is_shell(fg) {
+        return false;
+    }
+
+    // SAFETY: 无指针或外部内存依赖。
+    let Ok(state) = (unsafe { SHQueryUserNotificationState() }) else {
+        return false;
+    };
+    if state == QUNS_RUNNING_D3D_FULL_SCREEN {
+        return true;
+    }
+    if state != QUNS_BUSY && state != QUNS_PRESENTATION_MODE {
+        return false;
+    }
+    window_is_borderless_fullscreen(fg)
+}
+
+/// 当前前台是否激活了系统桌面或任务栏等壳层窗口（关闭全部窗口或 `Win+D` 显示桌面时为 `true`）。
+#[must_use]
+pub fn desktop_shell_active() -> bool {
+    // SAFETY: 无参数，只返回当前前台窗口句柄。
+    let fg = unsafe { wm::GetForegroundWindow() };
+    !fg.is_invalid() && (is_shell_or_desktop_window(fg) || ancestor_is_shell(fg))
+}
+
+fn ancestor_is_shell(hwnd: HWND) -> bool {
+    // SAFETY: `hwnd` 非空；`GetAncestor` 对无效句柄安全返回空句柄。
+    let root = unsafe { wm::GetAncestor(hwnd, wm::GA_ROOT) };
+    !root.is_invalid() && root != hwnd && is_shell_or_desktop_window(root)
+}
+
+fn is_shell_or_desktop_window(hwnd: HWND) -> bool {
+    if hwnd.is_invalid() {
+        return true;
+    }
+    // SAFETY: 与桌面/壳层句柄比较并查找子视图 `SHELLDLL_DefView`，均无生命周期风险。
+    unsafe {
+        if hwnd == wm::GetDesktopWindow() || hwnd == wm::GetShellWindow() {
+            return true;
+        }
+        if let Ok(def_view) = wm::FindWindowExW(Some(hwnd), None, w!("SHELLDLL_DefView"), None)
+            && !def_view.is_invalid()
+        {
+            return true;
+        }
+    }
+    let class = window_class_name(hwnd);
+    is_shell_class_name(&class)
+}
+
+fn window_class_name(hwnd: HWND) -> String {
+    let mut buf = [0u16; 256];
+    // SAFETY: `buf` 是固定长度局部变量，传入其有效切片缓冲。
+    let len = unsafe { wm::GetClassNameW(hwnd, &mut buf) };
+    usize::try_from(len)
+        .ok()
+        .and_then(|n| buf.get(..n))
+        .map(String::from_utf16_lossy)
+        .unwrap_or_default()
+}
+
+fn is_window_cloaked(hwnd: HWND) -> bool {
+    let mut cloaked = 0u32;
+    let size = u32::try_from(std::mem::size_of::<u32>()).unwrap_or(4);
+    // SAFETY: `cloaked` 为局部变量，大小与 `u32` 严格一致。
+    let hr = unsafe { DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&raw mut cloaked).cast(), size) };
+    hr.is_ok() && cloaked != 0
+}
+
+fn window_is_borderless_fullscreen(hwnd: HWND) -> bool {
+    // SAFETY: 均为标准 Win32 查询调用，指针均指向栈上局部变量。
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mon_rect = monitor_bounds(monitor);
+        let mut win_rect = RECT::default();
+        if wm::GetWindowRect(hwnd, &raw mut win_rect).is_err()
+            || !rect_covers_monitor(win_rect, mon_rect)
+        {
+            return false;
+        }
+        let style = u32::from_ne_bytes(wm::GetWindowLongW(hwnd, wm::GWL_STYLE).to_ne_bytes());
+        if (style & wm::WS_CAPTION.0) == wm::WS_CAPTION.0 && wm::IsZoomed(hwnd).as_bool() {
+            let mut client_top = POINT::default();
+            if ClientToScreen(hwnd, &raw mut client_top).as_bool() && client_top.y > mon_rect.top {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+fn is_shell_class_name(class: &str) -> bool {
+    matches!(
+        class,
+        "Progman"
+            | "WorkerW"
+            | "Shell_TrayWnd"
+            | "Shell_SecondaryTrayWnd"
+            | "NotifyIconOverflowWindow"
+            | "Windows.UI.Core.CoreWindow"
+            | "XamlExplorerHostIslandWindow"
+            | "MultitaskingViewFrame"
+            | "TaskListThumbnailWnd"
+            | "ForegroundStaging"
+    )
+}
+
+fn rect_covers_monitor(win: RECT, mon: RECT) -> bool {
+    mon.right > mon.left
+        && mon.bottom > mon.top
+        && win.left <= mon.left
+        && win.top <= mon.top
+        && win.right >= mon.right
+        && win.bottom >= mon.bottom
 }
 
 /// 打开 Windows 声音设置。
@@ -203,6 +336,18 @@ pub fn place_on_screen(saved: Option<(i32, i32)>, size: (i32, i32)) -> (i32, i32
     (area.right - w - 24, area.bottom - h)
 }
 
+fn monitor_bounds(monitor: windows::Win32::Graphics::Gdi::HMONITOR) -> RECT {
+    let mut info = MONITORINFO {
+        cbSize: u32::try_from(std::mem::size_of::<MONITORINFO>()).unwrap_or(0),
+        ..Default::default()
+    };
+    // SAFETY: `info` 是局部变量且 cbSize 已设置。
+    unsafe {
+        let _ = GetMonitorInfoW(monitor, &raw mut info);
+    }
+    info.rcMonitor
+}
+
 fn work_area(monitor: windows::Win32::Graphics::Gdi::HMONITOR) -> RECT {
     let mut info = MONITORINFO {
         cbSize: u32::try_from(std::mem::size_of::<MONITORINFO>()).unwrap_or(0),
@@ -213,4 +358,53 @@ fn work_area(monitor: windows::Win32::Graphics::Gdi::HMONITOR) -> RECT {
         let _ = GetMonitorInfoW(monitor, &raw mut info);
     }
     info.rcWork
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shell_class_names_are_filtered_from_fullscreen() {
+        for cls in [
+            "Progman",
+            "WorkerW",
+            "Shell_TrayWnd",
+            "Shell_SecondaryTrayWnd",
+            "NotifyIconOverflowWindow",
+        ] {
+            assert!(is_shell_class_name(cls), "{cls} 应被识别为桌面/壳层窗口");
+        }
+        assert!(!is_shell_class_name("UnityWndClass"));
+        assert!(!is_shell_class_name("Chrome_WidgetWin_1"));
+    }
+
+    #[test]
+    fn rect_covers_monitor_handles_primary_and_negative_monitors() {
+        let primary = RECT {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+        };
+        assert!(rect_covers_monitor(primary, primary));
+        assert!(!rect_covers_monitor(
+            RECT {
+                left: 0,
+                top: 0,
+                right: 1920,
+                bottom: 1040,
+            },
+            primary
+        ));
+
+        let secondary_left = RECT {
+            left: -1920,
+            top: 0,
+            right: 0,
+            bottom: 1080,
+        };
+        assert!(rect_covers_monitor(secondary_left, secondary_left));
+        assert!(!rect_covers_monitor(primary, secondary_left));
+    }
 }

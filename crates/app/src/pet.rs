@@ -60,6 +60,9 @@ pub fn spawn(
                 },
                 music: false,
                 placed: false,
+                desktop_ticks: 0,
+                was_desktop_fg: false,
+                retop_countdown: 0,
             };
             if let Err(e) = pet.run() {
                 log::error!("桌宠窗口出错：{e}");
@@ -93,6 +96,9 @@ struct Pet {
     props: WindowProps,
     music: bool,
     placed: bool,
+    desktop_ticks: u8,
+    was_desktop_fg: bool,
+    retop_countdown: u8,
 }
 
 impl Pet {
@@ -143,10 +149,34 @@ impl Pet {
                     {
                         log::warn!("提交画面失败：{e}");
                     }
+                    self.keep_above_desktop(&window);
                     stats.record(started, rendered, changed, &frame);
                 }
             }
             timer.wait(pacer.wait_ms(self.clock.now_ms(), interval));
+        }
+    }
+
+    /// 桌面外壳成为前台（关闭所有窗口或按 `Win+D`）时重新置顶，避免被 `WorkerW` 遮挡。
+    fn keep_above_desktop(&mut self, window: &PetWindow) {
+        if !self.placed {
+            return;
+        }
+        self.desktop_ticks = self.desktop_ticks.wrapping_add(1);
+        if self.desktop_ticks < 15 {
+            return;
+        }
+        self.desktop_ticks = 0;
+        let desktop_fg = yume_win::desktop_shell_active();
+        if desktop_fg && !self.was_desktop_fg {
+            self.retop_countdown = 3;
+        } else if !desktop_fg {
+            self.retop_countdown = 0;
+        }
+        self.was_desktop_fg = desktop_fg;
+        if self.retop_countdown > 0 {
+            window.ensure_topmost();
+            self.retop_countdown -= 1;
         }
     }
 

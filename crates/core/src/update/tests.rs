@@ -430,3 +430,21 @@ fn startup_requests_fonts_custom_font_and_bound_md() {
         path: Some("C:/bg.jpg".into()),
     }));
 }
+
+#[test]
+fn fullscreen_visibility_respects_setting_and_recovers() {
+    let mut w = World::new();
+    assert!(pet_window(&w.state).visible);
+
+    w.send(Command::Pet(PetCommand::FullscreenChanged(true)));
+    assert!(!pet_window(&w.state).visible);
+
+    w.send(Command::Pet(PetCommand::FullscreenChanged(false)));
+    assert!(pet_window(&w.state).visible);
+
+    w.send(Command::Settings(SettingsCommand::SetHideOnFullscreen(
+        false,
+    )));
+    w.send(Command::Pet(PetCommand::FullscreenChanged(true)));
+    assert!(pet_window(&w.state).visible);
+}

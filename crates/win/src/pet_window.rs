@@ -218,6 +218,18 @@ impl PetWindow {
         }
     }
 
+    /// 重新声明置顶而不激活窗口，防止显示桌面或关闭全部窗口时被 `WorkerW` 遮挡。
+    pub fn ensure_topmost(&self) {
+        if !self.shown || !self.visible {
+            return;
+        }
+        let flags = wm::SWP_NOMOVE | wm::SWP_NOSIZE | wm::SWP_NOACTIVATE;
+        // SAFETY: 窗口有效，仅维护 TOPMOST Z 序，不改变焦点、尺寸或位置。
+        unsafe {
+            let _ = wm::SetWindowPos(self.hwnd, Some(wm::HWND_TOPMOST), 0, 0, 0, 0, flags);
+        }
+    }
+
     fn show(&mut self, visible: bool) {
         let cmd = if visible {
             wm::SW_SHOWNOACTIVATE
