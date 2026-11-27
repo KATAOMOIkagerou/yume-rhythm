@@ -1,14 +1,14 @@
-// 设置页的界面字体与字号卡片：中文字体（上）、英文字体（下，查找优先级更高）、字号大小。
+// 设置页的字体卡片：可搜索的中/英文字体分离选择、全局字号调节、导入字体与恢复默认。
 
-import { ComboBox } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { ButtonKind, Card, Notice, PillButton } from "widgets.slint";
 import { RangeSlider } from "controls.slint";
+import { SearchableFontPicker } from "font_picker.slint";
 import { Store } from "store.slint";
 
 export component FontCard inherits Card {
     title: "界面字体";
-    hint: "英文字体优先匹配西文与数字";
+    hint: "支持关键词检索，中英字形隔离生效";
 
     VerticalLayout {
         spacing: 4px;
@@ -17,10 +17,16 @@ export component FontCard inherits Card {
             font-size: Theme.font-caption;
             color: Theme.text-secondary;
         }
-        zh-picker := ComboBox {
-            model: Store.zh-fonts;
-            current-index: Store.settings.zh-font-index;
-            selected => { Store.select-zh-font(self.current-index); }
+        zh-picker := SearchableFontPicker {
+            current-label: Store.settings.zh-font-label;
+            options: Store.zh-fonts;
+            open-changed(is-open) => {
+                if (is-open) {
+                    en-picker.close();
+                }
+            }
+            query-changed(q) => { Store.filter-zh-fonts(q); }
+            picked(idx) => { Store.select-zh-font(idx); }
         }
     }
 
@@ -31,10 +37,16 @@ export component FontCard inherits Card {
             font-size: Theme.font-caption;
             color: Theme.text-secondary;
         }
-        en-picker := ComboBox {
-            model: Store.en-fonts;
-            current-index: Store.settings.en-font-index;
-            selected => { Store.select-en-font(self.current-index); }
+        en-picker := SearchableFontPicker {
+            current-label: Store.settings.en-font-label;
+            options: Store.en-fonts;
+            open-changed(is-open) => {
+                if (is-open) {
+                    zh-picker.close();
+                }
+            }
+            query-changed(q) => { Store.filter-en-fonts(q); }
+            picked(idx) => { Store.select-en-font(idx); }
         }
     }
 
@@ -54,7 +66,7 @@ export component FontCard inherits Card {
                 color: Theme.accent-strong-text;
             }
         }
-        size-slider := RangeSlider {
+        font-size-slider := RangeSlider {
             label: "字号大小";
             minimum: 11;
             maximum: 18;
@@ -65,8 +77,7 @@ export component FontCard inherits Card {
     }
 
     HorizontalLayout {
-        spacing: 6px;
-        alignment: start;
+        spacing: 8px;
         PillButton {
             kind: ButtonKind.secondary;
             compact: true;
@@ -80,31 +91,16 @@ export component FontCard inherits Card {
             clicked => { Store.reset-font(); }
         }
     }
-
     if Store.settings.font-status != "": Notice {
         text: Store.settings.font-status;
         tone: Store.settings.font-failed ? Theme.red : Theme.text-secondary;
         tone-soft: Store.settings.font-failed ? Theme.red-soft : Theme.surface-alt;
     }
 
-    property <int> model-zh-index: Store.settings.zh-font-index;
-    changed model-zh-index => {
-        if (zh-picker.current-index != root.model-zh-index) {
-            zh-picker.current-index = root.model-zh-index;
-        }
-    }
-
-    property <int> model-en-index: Store.settings.en-font-index;
-    changed model-en-index => {
-        if (en-picker.current-index != root.model-en-index) {
-            en-picker.current-index = root.model-en-index;
-        }
-    }
-
     property <int> model-font-size: Store.settings.font-size;
     changed model-font-size => {
-        if (abs(size-slider.value - root.model-font-size) > 0.1) {
-            size-slider.value = root.model-font-size;
+        if (round(font-size-slider.value) != root.model-font-size) {
+            font-size-slider.value = root.model-font-size;
         }
     }
 }

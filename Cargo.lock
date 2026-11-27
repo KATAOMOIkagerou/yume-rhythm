@@ -6459,7 +6459,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -6507,7 +6507,7 @@ dependencies = [
 
 [[package]]
 name = "yume-app"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "log",
@@ -6522,7 +6522,7 @@ dependencies = [
 
 [[package]]
 name = "yume-audio"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "cpal",
  "log",
@@ -6532,7 +6532,7 @@ dependencies = [
 
 [[package]]
 name = "yume-beat"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -6540,7 +6540,7 @@ dependencies = [
 
 [[package]]
 name = "yume-character"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "log",
  "png",
@@ -6554,7 +6554,7 @@ dependencies = [
 
 [[package]]
 name = "yume-console"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "log",
  "png",
@@ -6566,7 +6566,7 @@ dependencies = [
 
 [[package]]
 name = "yume-core"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "log",
  "serde",
@@ -6575,7 +6575,7 @@ dependencies = [
 
 [[package]]
 name = "yume-win"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "global-hotkey",
  "log",

@@ -204,7 +204,13 @@ pub fn project(state: &AppState, now: WallMs) -> View {
         devices: std::iter::once("系统默认输出设备".to_owned())
             .chain(state.audio().devices.iter().map(|d| d.name.clone()))
             .collect(),
-        settings: settings::project_settings(state, &zh_font_families, &en_font_families),
+        settings: settings::project_settings(
+            state,
+            &zh_fonts,
+            &en_fonts,
+            &zh_font_families,
+            &en_font_families,
+        ),
         characters: settings::characters(state),
         accent_presets: settings::accent_presets(state),
         shortcuts: settings::shortcut_items(state),

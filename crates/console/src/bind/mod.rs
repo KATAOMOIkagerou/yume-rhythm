@@ -4,6 +4,7 @@
 
 mod callbacks;
 mod editor;
+mod font_filter;
 mod push;
 
 use crate::fonts::apply_font_stack;
@@ -21,6 +22,7 @@ pub struct Console {
     window: ConsoleWindow,
     /// 最近一次推送的内容。回调用它把下标换成 id。
     shown: Rc<RefCell<Option<View>>>,
+    font_filter: Rc<RefCell<font_filter::FontFilterState>>,
     models: Models,
 }
 
@@ -33,8 +35,8 @@ struct Models {
     characters: Rc<VecModel<SharedString>>,
     accent_presets: Rc<VecModel<ui::AccentOption>>,
     shortcuts: Rc<VecModel<ui::ShortcutItem>>,
-    zh_fonts: Rc<VecModel<SharedString>>,
-    en_fonts: Rc<VecModel<SharedString>>,
+    zh_fonts: Rc<VecModel<ui::FontOption>>,
+    en_fonts: Rc<VecModel<ui::FontOption>>,
 }
 
 impl Console {
@@ -69,7 +71,15 @@ impl Console {
         store.set_en_fonts(ModelRc::from(models.en_fonts.clone()));
 
         let shown = Rc::new(RefCell::new(None));
+        let font_filter = Rc::new(RefCell::new(font_filter::FontFilterState::default()));
         callbacks::wire(&store, &dispatch, &shown);
+        font_filter::wire(
+            &store,
+            &shown,
+            &font_filter,
+            &models.zh_fonts,
+            &models.en_fonts,
+        );
         let close = dispatch.clone();
         window.window().on_close_requested(move || {
             close(Command::Pet(PetCommand::HideConsole));
@@ -78,6 +88,7 @@ impl Console {
         Ok(Self {
             window,
             shown,
+            font_filter,
             models,
         })
     }
@@ -226,11 +237,21 @@ impl Console {
         if prev.shortcuts != next.shortcuts {
             sync(&m.shortcuts, next.shortcuts.iter().map(push::shortcut_item));
         }
-        if prev.zh_fonts != next.zh_fonts {
-            sync(&m.zh_fonts, next.zh_fonts.iter().map(SharedString::from));
+        if first_render
+            || prev.zh_fonts != next.zh_fonts
+            || prev.settings.zh_font_index != next.settings.zh_font_index
+        {
+            let q = self.font_filter.borrow().zh_query.clone();
+            let opts = font_filter::build_options(&next.zh_fonts, next.settings.zh_font_index, &q);
+            sync(&m.zh_fonts, opts.into_iter());
         }
-        if prev.en_fonts != next.en_fonts {
-            sync(&m.en_fonts, next.en_fonts.iter().map(SharedString::from));
+        if first_render
+            || prev.en_fonts != next.en_fonts
+            || prev.settings.en_font_index != next.settings.en_font_index
+        {
+            let q = self.font_filter.borrow().en_query.clone();
+            let opts = font_filter::build_options(&next.en_fonts, next.settings.en_font_index, &q);
+            sync(&m.en_fonts, opts.into_iter());
         }
         if prev.settings != next.settings {
             store.set_settings(push::settings(&next));

@@ -39,6 +39,8 @@ pub struct Settings {
     pub shortcut_error: String,
     pub zh_font_index: i32,
     pub en_font_index: i32,
+    pub zh_font_label: String,
+    pub en_font_label: String,
     pub font_size: i32,
     pub font_size_text: String,
     pub font_status: String,
@@ -72,6 +74,8 @@ pub struct ShortcutItem {
 
 pub(super) fn project_settings(
     state: &AppState,
+    zh_fonts: &[String],
+    en_fonts: &[String],
     zh_font_families: &[Option<String>],
     en_font_families: &[Option<String>],
 ) -> Settings {
@@ -97,6 +101,16 @@ pub(super) fn project_settings(
     };
     let zh_font_index = font_index_of(zh_font_families, s.zh_font_family.as_ref());
     let en_font_index = font_index_of(en_font_families, s.en_font_family.as_ref());
+    let zh_font_label = usize::try_from(zh_font_index)
+        .ok()
+        .and_then(|i| zh_fonts.get(i))
+        .cloned()
+        .unwrap_or_else(|| "默认字体（微软雅黑 UI）".to_owned());
+    let en_font_label = usize::try_from(en_font_index)
+        .ok()
+        .and_then(|i| en_fonts.get(i))
+        .cloned()
+        .unwrap_or_else(|| "默认字体（Segoe UI）".to_owned());
     let background_index = match s.background {
         BackgroundMode::Light => 0,
         BackgroundMode::Dark => 1,
@@ -145,6 +159,8 @@ pub(super) fn project_settings(
             .unwrap_or_default(),
         zh_font_index,
         en_font_index,
+        zh_font_label,
+        en_font_label,
         font_size: i32::try_from(s.font_size).unwrap_or(13),
         font_size_text: format!("{} px", s.font_size),
         font_status,

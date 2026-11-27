@@ -8,6 +8,7 @@
 //! 界面基于 Slint 构建（Made with Slint），见设置页「关于」。
 
 mod bind;
+pub mod font_mask;
 pub mod fonts;
 pub mod view;
 

@@ -126,6 +126,12 @@ export struct ShortcutItem {
     failed: bool,
 }
 
+export struct FontOption {
+    index: int,
+    label: string,
+    selected: bool,
+}
+
 export struct SettingsView {
     end-sound: bool,
     pet-scale: float,
@@ -155,6 +161,8 @@ export struct SettingsView {
     shortcut-error: string,
     zh-font-index: int,
     en-font-index: int,
+    zh-font-label: string,
+    en-font-label: string,
     font-size: int,
     font-size-text: string,
     font-status: string,
@@ -185,8 +193,8 @@ export global Store {
     in property <[string]> characters;
     in property <[AccentOption]> accent-presets;
     in property <[ShortcutItem]> shortcuts;
-    in property <[string]> zh-fonts;
-    in property <[string]> en-fonts;
+    in property <[FontOption]> zh-fonts;
+    in property <[FontOption]> en-fonts;
     // 当前正在录制快捷键时置为 true，避免顶层窗口快捷键误触发。
     in-out property <bool> recording-shortcut: false;
     // 0 无，1 确认暂停，2 确认离开自习，3 鼓励
@@ -266,6 +274,8 @@ export global Store {
     callback console-key-pressed(bool /* ctrl */, bool /* alt */, bool /* shift */, string /* text */) -> bool;
     callback select-zh-font(int);
     callback select-en-font(int);
+    callback filter-zh-fonts(string);
+    callback filter-en-fonts(string);
     callback set-font-size(int);
     callback pick-custom-font();
     callback reset-font();

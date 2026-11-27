@@ -198,6 +198,8 @@ pub(super) fn settings(v: &View) -> ui::SettingsView {
         shortcut_error: s.shortcut_error.as_str().into(),
         zh_font_index: s.zh_font_index,
         en_font_index: s.en_font_index,
+        zh_font_label: s.zh_font_label.as_str().into(),
+        en_font_label: s.en_font_label.as_str().into(),
         font_size: s.font_size,
         font_size_text: s.font_size_text.as_str().into(),
         font_status: s.font_status.as_str().into(),

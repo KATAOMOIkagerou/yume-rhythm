@@ -1,0 +1,163 @@
+// 可输入检索的字体下拉选择器：点击展开搜索框与匹配字体列表，支持空结果提示。
+
+import { LineEdit, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { ButtonKind, PillButton } from "widgets.slint";
+import { FontOption } from "store.slint";
+
+export component SearchableFontPicker inherits VerticalLayout {
+    in property <string> current-label;
+    in property <[FontOption]> options;
+    in-out property <bool> open: false;
+    property <string> query: "";
+
+    callback open-changed(bool);
+    callback query-changed(string);
+    callback picked(int);
+
+    public function close() {
+        if (root.open) {
+            root.open = false;
+            root.query = "";
+            root.query-changed("");
+        }
+    }
+
+    spacing: 6px;
+
+    trigger := Rectangle {
+        height: 34px;
+        border-radius: Theme.radius-small;
+        background: root.open || trigger-ta.has-hover ? Theme.surface-hover : Theme.surface-alt;
+        border-width: 1px;
+        border-color: root.open ? Theme.accent : Theme.border;
+        animate background { duration: 120ms; }
+
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 8px;
+
+            Text {
+                horizontal-stretch: 1;
+                text: root.current-label;
+                font-size: Theme.font-body;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Path {
+                    width: 10px;
+                    height: 10px;
+                    viewbox-width: 10;
+                    viewbox-height: 10;
+                    commands: root.open ? "M 2 6.5 L 5 3.5 L 8 6.5" : "M 2 3.5 L 5 6.5 L 8 3.5";
+                    stroke: Theme.text-secondary;
+                    stroke-width: 1.5px;
+                    fill: transparent;
+                }
+            }
+        }
+
+        trigger-ta := TouchArea {
+            accessible-role: button;
+            accessible-label: root.current-label;
+            mouse-cursor: MouseCursor.pointer;
+            clicked => {
+                if (root.open) {
+                    root.close();
+                    root.open-changed(false);
+                } else {
+                    root.open = true;
+                    root.open-changed(true);
+                }
+            }
+        }
+    }
+
+    if root.open: panel := Rectangle {
+        background: Theme.surface-solid;
+        border-width: 1px;
+        border-color: Theme.border;
+        border-radius: Theme.radius-small;
+
+        VerticalLayout {
+            padding: 8px;
+            spacing: 6px;
+
+            HorizontalLayout {
+                spacing: 6px;
+                search := LineEdit {
+                    horizontal-stretch: 1;
+                    text <=> root.query;
+                    placeholder-text: "输入关键词搜索字体…";
+                    font-size: Theme.font-caption;
+                    edited(t) => { root.query-changed(t); }
+                }
+                if root.query != "": PillButton {
+                    kind: ButtonKind.ghost;
+                    compact: true;
+                    text: "清除";
+                    clicked => {
+                        root.query = "";
+                        root.query-changed("");
+                    }
+                }
+            }
+
+            if root.options.length == 0: Rectangle {
+                height: 36px;
+                Text {
+                    text: "没有匹配的字体";
+                    font-size: Theme.font-caption;
+                    color: Theme.text-muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            if root.options.length > 0: ScrollView {
+                height: min(max(list-col.preferred-height, 30px), 192px);
+                content-width: self.visible-width;
+
+                list-col := VerticalLayout {
+                    spacing: 2px;
+                    for opt in root.options: Rectangle {
+                        height: 28px;
+                        border-radius: min(6px, Theme.radius-small);
+                        background: opt.selected ? Theme.accent-soft
+                            : row-ta.has-hover ? Theme.surface-hover : transparent;
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 6px;
+
+                            Text {
+                                horizontal-stretch: 1;
+                                text: opt.label;
+                                font-size: Theme.font-caption;
+                                font-weight: opt.selected ? 600 : 400;
+                                color: opt.selected ? Theme.accent-strong-text : Theme.text;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+
+                        row-ta := TouchArea {
+                            mouse-cursor: MouseCursor.pointer;
+                            clicked => {
+                                root.close();
+                                root.open-changed(false);
+                                root.picked(opt.index);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

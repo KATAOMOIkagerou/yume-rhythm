@@ -258,6 +258,8 @@ fn appearance_shortcuts_fonts_and_md_project_cleanly() {
     assert_eq!(v.settings.console_opacity_text, "85%");
     assert!(v.settings.zh_font_index > 0);
     assert_eq!(v.settings.en_font_index, 1);
+    assert_eq!(v.settings.zh_font_label, "微软雅黑");
+    assert_eq!(v.settings.en_font_label, "Consolas");
     assert_eq!(v.settings.font_size, 16);
     assert_eq!(
         v.font_pair,
